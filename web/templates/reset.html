@@ -1,0 +1,62 @@
+{% extends "auth_base.html" %}
+{% set lang_next = '/auth/reset?token=' ~ token %}
+
+{% block title %}{{ t('auth.reset_title') }}{% endblock %}
+
+{% block head_extra %}
+{# Belirtec adres cubugunda. `web/main.py` zaten `Referrer-Policy: same-origin`
+   veriyor; burada tumden kapatiyoruz — bu sayfadaki bir CDN istegi bile
+   adresi disari tasimasin. #}
+<meta name="referrer" content="no-referrer">
+{% endblock %}
+
+{% block card %}
+<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-4">
+  {% if done %}
+  <div class="text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-sm">
+    {{ t('auth.reset_done') }}
+  </div>
+  <a href="/auth/login"
+     class="block text-center w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold text-sm transition">
+    {{ t('auth.submit') }}
+  </a>
+
+  {% elif error and not token %}
+  <div class="text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-sm">{{ error }}</div>
+  <a href="/auth/forgot" class="block text-center text-xs text-slate-500 hover:text-slate-900 hover:underline">
+    {{ t('auth.forgot_link') }}
+  </a>
+
+  {% else %}
+  <form method="post" action="/auth/reset" class="space-y-4">
+    <input type="hidden" name="token" value="{{ token }}">
+    {% if error %}
+    <div class="text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-sm">{{ error }}</div>
+    {% endif %}
+    <div>
+      <label class="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+        {{ t('auth.new_password') }}
+      </label>
+      <input required autofocus name="new_password" type="password" minlength="8"
+             autocomplete="new-password" class="input">
+    </div>
+    <div>
+      <label class="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+        {{ t('auth.new_password_confirm') }}
+      </label>
+      <input required name="new_password_confirm" type="password" minlength="8"
+             autocomplete="new-password" class="input">
+    </div>
+    <button type="submit"
+            class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold text-sm transition">
+      {{ t('auth.reset_submit') }}
+    </button>
+    <div class="text-center pt-1">
+      <a href="/auth/login" class="text-xs text-slate-500 hover:text-slate-900 hover:underline">
+        {{ t('auth.back_to_login') }}
+      </a>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

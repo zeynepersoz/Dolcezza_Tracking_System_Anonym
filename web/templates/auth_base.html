@@ -1,0 +1,64 @@
+{# Giris / sifremi unuttum / sifre belirleme ekranlarinin ortak kabugu.
+
+   Uc sayfa da panelin `base.html`ini KULLANAMAZ: orada menu, kullanici rozeti
+   ve oturum baglantilari var — henuz oturum yokken hepsi anlamsiz. Kabugu
+   kopyalamak yerine burada topluyoruz ki logo, dil secici ve kutu bicimi uc
+   ekranda ayni kalsin. #}
+<!DOCTYPE html>
+<html lang="{{ lang() }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {% block head_extra %}{% endblock %}
+  <title>{% block title %}{{ t('app.title') }}{% endblock %} · {{ t('app.title') }}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/logo-mark.svg">
+  <link rel="icon" type="image/png" sizes="512x512" href="/static/logo-mark.png">
+  {# Yerel kopya — bkz. base.html: dis CDN'ler ic agda acilis donmalarina yol aciyordu. #}
+  <script src="/static/vendor/tailwind-play.js"></script>
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+      colors: { gls: { yellow: '#FFCC00', dark: '#0A1A2A' } },
+    } } };
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background:
+        radial-gradient(circle at 15% 20%, rgba(255,204,0,.10), transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(15,23,42,.06), transparent 45%),
+        #f8fafc;
+    }
+    .input { width:100%; border:1px solid #dde3ea; border-radius:.6rem; padding:.6rem .8rem; font-size:.875rem;
+             transition:border-color .12s, box-shadow .12s; }
+    .input:focus { outline:none; border-color:#FFCC00; box-shadow:0 0 0 3.5px rgba(255,204,0,.22); }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center px-4">
+  <div class="w-full max-w-sm">
+    <div class="flex flex-col items-center mb-7">
+      {# Giris ekraninda yatay Dolcezza yazi logosu: sayfada bol yer var, marka
+         burada okunmali. Amblem yalnizca menu cubugunda ve sekme simgesinde. #}
+      <img src="/static/logo-wordmark.svg" alt="Dolcezza" class="h-20 w-auto mb-5">
+      <div class="text-slate-900 font-semibold text-lg tracking-tight">{{ t('app.title') }}</div>
+      <div class="text-slate-400 text-xs mt-1 uppercase tracking-widest">Netherlands &middot; Ireland</div>
+      <!-- Dil anahtari giriste de var: panele girmeden once secilebilsin. -->
+      <div class="flex rounded-lg border border-slate-200 overflow-hidden mt-4 bg-white" title="{{ t('common.language') }}">
+        {% for code, short in langs %}
+        {# Dil degistirince ayni ekranda kalinir. `lang_next`i yalnizca sorgu
+           dizesi tasiyan sayfa (sifirlama) ezer; digerlerinde yol yeterli. #}
+        <a href="/lang/{{ code }}?next={{ lang_next|default(request.url.path, true) }}"
+           class="px-2.5 py-1 text-[11px] font-semibold
+                  {% if lang() == code %}bg-slate-900 text-white{% else %}text-slate-500 hover:bg-slate-50{% endif %}">
+          {{ short }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% block card %}{% endblock %}
+
+    <p class="text-center text-xs text-slate-400 mt-6">{{ t('app.title') }} &middot; {{ t('auth.internal_use') }}</p>
+  </div>
+</body>
+</html>

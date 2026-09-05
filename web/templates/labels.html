@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.labels') }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+  <div class="card overflow-hidden">
+    <div class="card-header">
+      <h2 class="card-title">{{ t('labels.new') }}</h2>
+      <p class="card-subtitle">{{ t('labels.new_note') }}</p>
+    </div>
+
+    <script type="application/json" id="addresses-data">{{ addresses_json|safe }}</script>
+
+    {# Gonder butonu istek boyunca kilitlenir: cift tiklamak IKINCI bir etiket
+       basiyordu. Etiket geri alinamaz ve GLS her koliyi ayrica faturaliyor —
+       yani mukerrer tiklamanin bedeli gercek para. Toplu akista (/dispatch/create)
+       ayni koruma sunucu tarafinda zaten var (bkz. dispatch.py: calisan is varsa
+       reddediyor); tek etiket formunda hicbir koruma yoktu. #}
+    <form hx-post="/labels/create" hx-target="#label-result" hx-swap="innerHTML"
+          hx-disabled-elt="find button[type='submit']"
+          class="p-6 space-y-6"
+          x-data="{
+            channel: 'NL',
+            addressesData: JSON.parse(document.getElementById('addresses-data').textContent),
+            picked: '',
+            q: '',
+            open: false,
+            weights: [1.0],
+            consignee: {name:'', name2:'', name3:'', company:'', street:'', house_number:'',
+                        addition:'', postal_code:'', city:'', country:'', contact:'',
+                        phone:'', mobile:'', email:''},
+            /* 160+ kayitta acilir liste kullanilamiyordu; arama istemcide yapilir,
+               veri zaten sayfada (#addresses-data) — ek istek yok. */
+            matches() {
+              const q = this.q.trim().toLowerCase();
+              const hit = q
+                ? this.addressesData.filter(a => [a.name, a.name2, a.name3, a.company,
+                                                  a.city, a.country, a.postal_code]
+                      .some(v => (v || '').toLowerCase().includes(q)))
+                : this.addressesData;
+              return hit.slice(0, 30);      // uzun liste kaydirmayi bogar
+            },
+            pick(a) {
+              this.picked = a.id;
+              this.consignee = { ...a };
+              this.q = a.name2 ? a.name2 + ' · ' + a.name : a.name;
+              this.open = false;
+            },
+            reset() {
+              this.picked = ''; this.q = ''; this.open = false;
+              for (const k in this.consignee) { this.consignee[k] = ''; }
+            }
+          }">
+
+      <!-- Kanal (Varsayılan: NL) -->
+      <input type="hidden" name="channel" value="NL">
+
+      <!-- Alici: adres defterinden secilir, secince alanlar otomatik dolar ve manuel duzenlenebilir -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <label class="field-label mb-0">{{ t('field.consignee') }}</label>
+          <span x-show="picked" class="badge badge-emerald">
+            {{ t('labels.filled_from_book') }}
+          </span>
+        </div>
+        <div class="relative" @click.outside="open = false">
+          <div class="relative">
+            <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/>
+            </svg>
+            <input type="text" x-model="q" @focus="open = true" @input="open = true"
+                   autocomplete="off" class="input pl-9 pr-9"
+                   placeholder="{{ t('labels.search_address', count=addresses|length) }}">
+            <button type="button" x-show="q" @click="reset()"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 px-1"
+                    title="{{ t('common.clear') }}">&times;</button>
+          </div>
+
+          <div x-show="open" x-cloak
+               class="absolute z-20 mt-1 w-full max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg">
+            <template x-for="a in matches()" :key="a.id">
+              <button type="button" @click="pick(a)"
+                      class="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-50 last:border-0">
+                <div class="text-sm text-slate-800 flex items-center gap-1.5">
+                  <span class="font-mono font-semibold" x-text="a.name2"></span>
+                  <span x-text="a.name"></span>
+                  <span x-show="a.dup" class="badge badge-amber text-[10px] px-1.5 py-0.5"
+                        title="{{ t('labels.multi_store_hint') }}">{{ t('labels.multi_store') }}</span>
+                </div>
+                <div class="text-xs text-slate-500"
+                     x-text="[a.street, a.postal_code, a.city, a.country].filter(Boolean).join(' · ')"></div>
+              </button>
+            </template>
+            <div x-show="!matches().length" class="px-3 py-3 text-sm text-slate-500">
+              {{ t('common.empty') }}
+            </div>
+          </div>
+        </div>
+        <input type="hidden" name="consignee_id" :value="picked || 0">
+
+        <div class="border border-slate-200 rounded-xl p-4 bg-slate-50/70 grid grid-cols-3 gap-2.5">
+          <input x-model="consignee.name" name="consignee_name" required placeholder="{{ t('addr.ph.name') }}" class="input">
+          <input x-model="consignee.company" name="consignee_company" placeholder="{{ t('addr.ph.company') }}" class="input">
+          <input x-model="consignee.contact" name="consignee_contact" placeholder="{{ t('addr.ph.contact') }}" class="input">
+          <input x-model="consignee.name2" name="consignee_name2" placeholder="Name 2" class="input">
+          <input x-model="consignee.name3" name="consignee_name3" placeholder="Name 3" class="input">
+          <div></div>
+          <input x-model="consignee.street" name="consignee_street" placeholder="{{ t('addr.ph.street') }}" class="col-span-2 input">
+          <input x-model="consignee.house_number" name="consignee_house_number" placeholder="{{ t('addr.ph.house_number') }}" class="input">
+          <input x-model="consignee.addition" name="consignee_addition" placeholder="{{ t('addr.ph.addition') }}" class="input">
+          <input x-model="consignee.postal_code" name="consignee_postal_code"
+                 placeholder="{{ t('addr.ph.postal_code') }}" class="input">
+          <input x-model="consignee.city" name="consignee_city" placeholder="{{ t('addr.ph.city') }}" class="input">
+          <input x-model="consignee.country" name="consignee_country" placeholder="{{ t('addr.ph.country') }}" maxlength="3" class="input">
+          <input x-model="consignee.phone" name="consignee_phone" placeholder="{{ t('addr.ph.phone') }}" class="input">
+          <input x-model="consignee.mobile" name="consignee_mobile" placeholder="{{ t('addr.ph.mobile') }}" class="input">
+          <input x-model="consignee.email" name="consignee_email" type="email" placeholder="{{ t('addr.ph.email') }}" class="input">
+        </div>
+      </div>
+
+      {% if not addresses %}
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-sm text-amber-800">
+        {{ t('labels.book_empty')|safe }}
+      </div>
+      {% endif %}
+
+      <!-- Detaylar. Her koli KENDI kilosunu tasir: alan tekrarlanir, koli sayisi
+           satir sayisidir. Tek kiloyu koli sayisina yaymak yanlis navlundu. -->
+      <div class="grid grid-cols-3 gap-4 items-start">
+        <div class="space-y-3">
+          <div>
+            <label class="field-label">{{ t('field.reference') }}</label>
+            <input type="text" name="reference" placeholder="{{ t('labels.ph.reference') }}" class="input">
+          </div>
+          <!-- Not1/Not2: GLS etiketine ek referans satiri olarak basilir -->
+          <div>
+            <label class="field-label">{{ t('labels.note1') }}</label>
+            <input type="text" name="note1" placeholder="{{ t('labels.ph.note1') }}" class="input">
+          </div>
+          <div>
+            <label class="field-label">{{ t('labels.note2') }}</label>
+            <input type="text" name="note2" placeholder="{{ t('labels.ph.note2') }}" class="input">
+          </div>
+        </div>
+        <div class="col-span-2">
+          <label class="field-label">
+            {{ t('labels.weight_kg') }}
+            <span class="text-slate-400 font-normal" x-text="'(' + weights.length + ')'"></span>
+          </label>
+          <div class="space-y-2">
+            <template x-for="(w, i) in weights" :key="i">
+              <div class="flex items-center gap-2">
+                <span class="w-5 text-right text-xs font-mono text-slate-400" x-text="i + 1"></span>
+                <input type="number" name="weight_kg" x-model="weights[i]" required
+                       step="0.1" min="0.1" max="999" class="input flex-1">
+                <button type="button" @click="weights.splice(i, 1)"
+                        x-show="weights.length > 1" class="px-2 text-slate-400 hover:text-rose-600"
+                        title="{{ t('common.delete') }}">&times;</button>
+              </div>
+            </template>
+          </div>
+          <button type="button" @click="weights.push(weights[weights.length - 1])"
+                  class="mt-2 text-sm font-medium text-slate-600 hover:text-slate-900">
+            + {{ t('labels.add_box') }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Servisler -->
+      <div>
+        <label class="field-label">{{ t('labels.services') }}</label>
+        <div class="flex gap-4 text-sm text-slate-700">
+          <label class="inline-flex items-center gap-1.5">
+            <input type="checkbox" name="services" value="FlexDeliveryService" class="rounded">
+            FlexDeliveryService
+          </label>
+          <label class="inline-flex items-center gap-1.5">
+            <input type="checkbox" name="services" value="SaturdayDelivery" class="rounded">
+            SaturdayDelivery
+          </label>
+          <label class="inline-flex items-center gap-1.5">
+            <input type="checkbox" name="services" value="GuaranteedDelivery" class="rounded">
+            GuaranteedDelivery
+          </label>
+        </div>
+      </div>
+
+      <!-- Buton -->
+      <div class="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+        <button type="submit" class="btn btn-accent mt-4">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+          </svg>
+          {{ t('labels.submit') }}
+        </button>
+      </div>
+
+      <div id="label-result" class="pt-2"></div>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

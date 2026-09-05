@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ t('reports.parcel_shop_title') }}{% endblock %}
+
+{% block content %}
+{#
+  Kullanici bulgusu (2026-08-31): "parcel shopa teslim edilen ancak
+  musterinin almadigi gonderi de iadeye donebiliyor, returned durumu da
+  yanlis oluyor" — GLS bir koliyi alicinin adresine degil kendi ParcelShop'una
+  biraktiginda bunu "teslim edildi" sayar; musteri almazsa GLS bir sure sonra
+  geri döndürür. Bu koliler normal iade sayisina karisip gercek olmayan bir
+  "basarisiz teslimat" izlenimi veriyordu.
+
+  Once /reports/delivery-times'in icine gomulmustu; kullanici bunu ayri, kendi
+  menu ogesi olan bir sayfa istedi (bkz. web/templates/base.html nav grubu).
+#}
+{# `ps` context'ten geliyor (bkz. web/routers/reports.py:parcel_shop_page). #}
+<div class="flex items-start justify-between gap-3 flex-wrap">
+  <div>
+    <h1 class="text-lg font-bold text-slate-900">{{ t('reports.parcel_shop_title') }}</h1>
+    <p class="card-subtitle mt-0.5 max-w-2xl leading-relaxed">{{ t('reports.parcel_shop_note') }}</p>
+  </div>
+  {% if ps.rows %}
+  <div class="flex items-center gap-2">
+    <a href="/reports/parcel-shop/export.xlsx?carrier={{ ps.channel }}" class="btn btn-secondary btn-sm">{{ t('export.xlsx') }}</a>
+    <a href="/reports/parcel-shop/export.pdf?carrier={{ ps.channel }}" class="btn btn-secondary btn-sm">{{ t('export.pdf') }}</a>
+  </div>
+  {% endif %}
+</div>
+
+{# Tasima firmasi sekmeleri (kullanici istegi 2026-09-03). #}
+<div class="flex items-center gap-1 mt-4 border-b border-slate-200">
+  {% for code, label in ps.channels %}
+  <a href="/reports/parcel-shop?carrier={{ code }}"
+     class="px-3 py-1.5 text-sm font-medium -mb-px border-b-2 transition
+            {% if code == ps.channel %}border-slate-900 text-slate-900{% else %}border-transparent text-slate-500 hover:text-slate-700{% endif %}">
+    {{ label }}
+  </a>
+  {% endfor %}
+</div>
+
+{% if not ps.rows %}
+<div class="card p-8 text-center text-slate-400 mt-4">{{ t('reports.parcel_shop_empty') }}</div>
+{% else %}
+
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+  <div class="card p-5">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('reports.parcel_shop.total') }}</div>
+    <div class="mt-2 text-3xl font-bold text-slate-900">{{ ps.total }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t('reports.parcel_shop.total_note') }}</div>
+  </div>
+  <div class="card p-5 {% if ps.at_risk %}border-amber-200{% endif %}">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('reports.parcel_shop.at_risk') }}</div>
+    <div class="mt-2 text-3xl font-bold text-amber-600">{{ ps.at_risk }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t('reports.parcel_shop.at_risk_note') }}</div>
+  </div>
+  <div class="card p-5">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('reports.parcel_shop.returned') }}</div>
+    <div class="mt-2 text-3xl font-bold text-rose-600">{{ ps.returned }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t('reports.parcel_shop.returned_note') }}</div>
+  </div>
+  <div class="card p-5">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('reports.parcel_shop.collected') }}</div>
+    <div class="mt-2 text-3xl font-bold text-emerald-600">{{ ps.collected }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t('reports.parcel_shop.collected_note') }}</div>
+  </div>
+</div>
+
+<div class="card overflow-hidden mt-6">
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{ t('field.tracking_no') }}</th>
+          <th>{{ t('field.store_code') }}</th>
+          <th>{{ t('field.invoice_number') }}</th>
+          <th>{{ t('field.country') }}</th>
+          <th>{{ t('reports.parcel_shop.col.first_at') }}</th>
+          <th>{{ t('reports.parcel_shop.col.status') }}</th>
+          <th>{{ t('reports.parcel_shop.col.timeout') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {# Satira tiklayinca ilgili kolinin detayi acilsin — "tıklayınca
+           detayların da gözükmesi lazım" (kullanici istegi, 2026-08-31),
+           /tracking'teki satir davranisiyla AYNI desen. #}
+        {% for row in ps.rows %}
+        <tr class="cursor-pointer" onclick="window.location='/tracking?search={{ row.tracking_no }}'">
+          <td class="font-mono text-xs text-slate-700">{{ row.tracking_no }}</td>
+          <td class="font-semibold text-slate-800">{{ row.store_code or '—' }}</td>
+          <td class="text-xs text-slate-500">{{ row.invoice_number or '—' }}</td>
+          <td class="text-xs text-slate-500">{{ row.country or '—' }}</td>
+          <td class="text-xs text-slate-500 whitespace-nowrap">{{ row.first_at|localtime or '—' }}</td>
+          <td>
+            <span class="badge badge-{{ status_color(row.status) }}">
+              <span class="badge-dot"></span>
+              {{ status_label(row.status) }}
+            </span>
+          </td>
+          <td>
+            {% if row.timed_out %}
+            <span class="badge badge-amber">⚠ {{ t('reports.parcel_shop.timed_out') }}</span>
+            {% else %}
+            <span class="text-slate-300">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

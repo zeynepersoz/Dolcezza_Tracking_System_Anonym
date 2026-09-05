@@ -1,0 +1,43 @@
+{# Tek bir ayar alani. Sir maskelemesi SADECE burada — ama asil koruma veri
+   katmanindadir: store.for_display() sir alanlarinda value="" doner. #}
+<div>
+  <label class="field-label flex items-center gap-2">
+    {{ f.label }}
+    {% if f.secret %}
+      {% if f.has_value %}
+      <span class="badge badge-emerald">{{ t('settings.secret_saved') }}</span>
+      {% else %}
+      <span class="badge badge-slate">{{ t('settings.secret_empty') }}</span>
+      {% endif %}
+    {% endif %}
+  </label>
+
+  {% if f.type == 'select' %}
+  <select name="{{ f.key }}" class="input">
+    {% for value, label in f.choices %}
+    <option value="{{ value }}" {% if value == f.value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+
+  {% elif f.type == 'int' %}
+  <input type="number" name="{{ f.key }}" value="{{ f.value }}" class="input"
+         {% if f.minimum is not none %}min="{{ f.minimum }}"{% endif %}
+         {% if f.maximum is not none %}max="{{ f.maximum }}"{% endif %}>
+
+  {% elif f.secret %}
+  <input type="password" name="{{ f.key }}" value="" class="input" autocomplete="new-password"
+         placeholder="{% if f.has_value %}{{ t('settings.secret_ph') }}{% else %}{{ t('settings.secret_empty') }}{% endif %}">
+
+  {% else %}
+  <input type="text" name="{{ f.key }}" value="{{ f.value }}" class="input">
+  {% endif %}
+
+  <div class="flex items-start justify-between gap-4 mt-1">
+    <p class="text-xs text-slate-400">{{ f.help }}</p>
+    {% if f.secret and f.has_value %}
+    <label class="text-xs text-rose-600 whitespace-nowrap flex items-center gap-1">
+      <input type="checkbox" name="clear_{{ f.key }}" value="1"> {{ t('settings.secret_clear') }}
+    </label>
+    {% endif %}
+  </div>
+</div>

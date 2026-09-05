@@ -1,0 +1,104 @@
+{# 30 sevkiyat x ~1.5 s senkron istegi zaman asimina ugratirdi; is arka planda
+   calisir, bu parca saniyede bir kendini yeniler ve bitince pollingi keser. #}
+{% if not job %}
+  <div class="card p-6 text-center text-slate-500">{{ t('dispatch.err_nothing') }}</div>
+{% elif not job.done %}
+<div class="card p-5"
+     hx-get="/dispatch/progress" hx-trigger="every 1s" hx-target="#dispatch-body"
+     hx-swap="innerHTML">
+  <div class="font-semibold text-slate-800">{{ t('dispatch.progress_title') }}</div>
+  <div class="text-sm text-slate-500 mt-1 font-mono">
+    {{ t('dispatch.progress_line', current=job.current, total=job.total, store=job.store) }}
+  </div>
+  <div class="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
+    <div class="h-full bg-blue-600 transition-all"
+         style="width: {{ (job.current * 100 // job.total) if job.total else 0 }}%"></div>
+  </div>
+</div>
+
+{% elif job.error %}
+<div class="card p-5 border-rose-200 bg-rose-50">
+  <div class="font-semibold text-rose-800">{{ t('dispatch.err_title') }}</div>
+  <div class="text-sm text-rose-700 mt-1">{{ job.error }}</div>
+</div>
+
+{% else %}
+{% set result = job.result %}
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title text-emerald-700">{{ t('dispatch.done_title') }}</div>
+      <p class="text-sm text-slate-500 mt-1">
+        {{ t('dispatch.done_line', created=result.created|length, failed=result.failed|length) }}
+      </p>
+    </div>
+    {# HTMX YOK: dosya indirmesini tarayici yapmali, yanit DOM'a girmemeli.
+       Iki dugme AYRI is gorur: PDF tek seferde yazdirmak icin (kullanici
+       istegi, 2026-09-01), ZIP arsivlemek/tek tek acmak icin. #}
+    {# IKI AYRI PDF dugmesi. Kullanici bildirdi (2026-09-01): tek dugme gunun
+       TAMAMINI veriyordu, oysa cogu zaman yalnizca AZ ONCE basilanlar
+       yazdirilacak. Uğur'un ifadesiyle: "4 Eylul'deki hepsini mi, simdi
+       yazdirilan 2 tane mi". Sayilar dugmenin uzerinde yaziyor ki hangisinin
+       ne getirdigi tiklamadan once belli olsun. #}
+    {% set job_count = result.created | map(attribute='tracking_numbers') | map('length') | sum %}
+    <div class="flex items-center gap-2 flex-wrap justify-end">
+      <form method="post" action="/dispatch/download-pdf">
+        <input type="hidden" name="day" value="{{ result.day }}">
+        {% for r in result.created %}{% for no in r.tracking_numbers %}
+        <input type="hidden" name="tracking_nos" value="{{ no }}">
+        {% endfor %}{% endfor %}
+        <button type="submit" class="btn btn-primary gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+          </svg>
+          {{ t('dispatch.download_pdf_job', count=job_count) }}
+        </button>
+      </form>
+      <form method="post" action="/dispatch/download-pdf">
+        <input type="hidden" name="day" value="{{ result.day }}">
+        <button type="submit" class="btn btn-secondary gap-1.5">
+          {{ t('dispatch.download_pdf_day', day=result.day) }}
+        </button>
+      </form>
+      <form method="post" action="/dispatch/download-zip">
+        <input type="hidden" name="day" value="{{ result.day }}">
+        <button type="submit" class="btn btn-secondary">{{ t('dispatch.download_zip') }}</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="px-4 pb-2 text-xs text-slate-500 font-mono">
+    {{ t('dispatch.result_folder') }}: {{ result.out_dir }}
+  </div>
+
+  <div class="divide-y divide-slate-100">
+    {% for r in result.created %}
+    <div class="flex items-center justify-between gap-3 p-3">
+      <div class="min-w-0">
+        <span class="font-mono font-semibold text-slate-800">{{ r.store_code }}</span>
+        <span class="text-xs text-slate-500 ml-2">{{ t('field.reference') }}: {{ r.reference }}</span>
+        <div class="text-xs text-slate-400 font-mono truncate">
+          {{ r.tracking_numbers | join(' · ') }}
+        </div>
+      </div>
+      <a class="btn btn-secondary btn-sm"
+         href="/dispatch/label/{{ r.store_code }}?day={{ result.day }}">
+        {{ t('common.download') }}
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if result.failed %}
+  <div class="border-t border-slate-100 p-3">
+    <div class="text-sm font-semibold text-rose-700 mb-1">{{ t('dispatch.failed_title') }}</div>
+    {% for r in result.failed %}
+    <div class="text-xs text-rose-600">
+      <span class="font-mono">{{ r.store_code }}</span> — {{ r.error }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}

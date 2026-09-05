@@ -1,0 +1,21 @@
+# Docker imajina girmemesi gerekenler (deploy.sh rsync'i de benzerini disliyor).
+.git
+.gitignore
+.dockerignore
+.claude
+.pytest_cache
+**/__pycache__
+*.pyc
+*.pyo
+venv
+.venv
+.env
+.env.local
+.DS_Store
+.vscode
+.idea
+
+# Yerel veri/ciktilar — sunucuda bind-mount (docker-compose.yml)
+data/
+output/
+backups/

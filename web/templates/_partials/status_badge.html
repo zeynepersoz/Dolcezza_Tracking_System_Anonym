@@ -1,0 +1,7 @@
+{# Ortak statu rozeti. Argumanlar: status (kod), label, color (tailwind color name) #}
+{% set color = color|default('slate') %}
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
+             bg-{{ color }}-50 text-{{ color }}-700 border border-{{ color }}-200">
+  <span class="w-1.5 h-1.5 rounded-full bg-{{ color }}-500"></span>
+  {{ label }}
+</span>

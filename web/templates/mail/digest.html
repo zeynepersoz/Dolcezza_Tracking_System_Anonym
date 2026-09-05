@@ -1,0 +1,177 @@
+{# Mail govdesi — web sayfasi DEGIL.
+
+   base.html'i genisletmez, Tailwind yoktur, <style> blogu yoktur: Outlook
+   <style> bloklarini ve flex/grid duzeni yok sayar. Her stil satir icidir,
+   duzen <table> iledir. KPI kartlari panelin ust seridinin mail karsiligidir.
+
+   Bu sablon YONETICI OZETIDIR — satir satir detay ekteki Excel'de.
+
+   `|safe` gecen metinler `i18n/tr.py` ile `en.py`den gelir: kalin/renkli vurgu
+   ceviriyle birlikte tasindigi icin sozlukte HTML var, disaridan veri girmiyor. #}
+<!doctype html>
+<html lang="{{ lang }}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="background:#f1f5f9;padding:24px 12px;">
+  <tr><td align="center">
+
+  <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0"
+         style="width:640px;max-width:100%;background:#ffffff;border-radius:12px;overflow:hidden;
+                font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+
+    {# --- Baslik bandi --- #}
+    <tr><td style="background:#1e293b;padding:20px 24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="color:#ffffff;font-size:17px;font-weight:700;">
+            <span style="color:#FFCC00;">GLS</span> {{ t('mail.title') }}
+            {# Gonderen adi Exchange'in elinde; sistemin adi burada ve konuda gecer. #}
+            <div style="color:#94a3b8;font-size:11px;font-weight:400;padding-top:4px;">
+              {{ system_name }}
+            </div>
+          </td>
+          <td align="right" style="color:#94a3b8;font-size:12px;">{{ day }}</td>
+        </tr>
+      </table>
+    </td></tr>
+
+    {# --- KPI kartlari: 5 sutun, panelin ust seridiyle ayni sira.
+           Sayilar KUMULATIF — sezonun tamami, "bu hafta" degil. --- #}
+    <tr><td style="padding:20px 16px 4px 16px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          {% set cards = [
+            (t('mail.card.total'),             data.total,                   '#0f172a', '#f8fafc'),
+            (t('mail.card.in_transit'),        data.counts.in_transit,       '#2563eb', '#eff6ff'),
+            (t('mail.card.out_for_delivery'),  data.counts.out_for_delivery, '#d97706', '#fffbeb'),
+            (t('mail.card.delivered'),         data.counts.delivered,        '#059669', '#ecfdf5'),
+            (t('mail.card.exception'),         data.counts.exception,        '#e11d48', '#fff1f2'),
+            (t('mail.card.returned'),          data.counts.returned,         '#7c3aed', '#f5f3ff'),
+          ] %}
+          {% for label, value, color, bg in cards %}
+          <td width="16%" style="padding:4px;" valign="top">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                   style="background:{{ bg }};border:1px solid #e2e8f0;border-radius:8px;">
+              <tr><td style="padding:10px 8px;text-align:center;">
+                <div style="font-size:9px;letter-spacing:.5px;color:#64748b;font-weight:700;">{{ label }}</div>
+                <div style="font-size:22px;font-weight:700;color:{{ color }};padding-top:4px;">{{ value }}</div>
+              </td></tr>
+            </table>
+          </td>
+          {% endfor %}
+        </tr>
+      </table>
+    </td></tr>
+
+    {# --- Yonetici ozeti: birkac cumle, tablo yok --- #}
+    <tr><td style="padding:16px 24px 4px 24px;">
+      <div style="font-size:13px;color:#334155;line-height:1.7;">
+        {% set head = 'mail.summary.season' if data.season else 'mail.summary.total' %}
+        {{ t(head, season=data.season, total=data.total, delivered=data.counts.delivered,
+             pct=data.delivered_pct, on_the_way=data.on_the_way)|safe }}
+        {{ t('mail.summary.today', count=data.delivered|length)|safe }}
+        {% if data.exceptions %}
+        {{ t('mail.summary.exceptions', count=data.exceptions|length)|safe }}
+        {% else %}
+        {{ t('mail.summary.no_exceptions') }}
+        {% endif %}
+        {% if data.stale %}
+        {{ t('mail.summary.stale', count=data.stale|length, days=data.stale_days)|safe }}
+        {% endif %}
+        {% if data.partial %}
+        {{ t('mail.summary.partial', count=data.partial|length)|safe }}
+        {% endif %}
+        {% if data.not_handed_over %}
+        {{ t('mail.summary.not_handed_over', count=data.not_handed_over|length) }}
+        {% endif %}
+        {% if data.pod_missing %}
+        {{ t('mail.summary.pod_missing', count=data.pod_missing|length) }}
+        {% endif %}
+      </div>
+    </td></tr>
+
+    {# --- Bugun teslim edilenler: yalnizca son 24 saat --- #}
+    <tr><td style="padding:12px 24px 0 24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;">
+        <tr><td style="padding:12px 14px;">
+          <div style="font-size:13px;font-weight:700;color:#065f46;">
+            {{ t('mail.today.heading', day=day, count=data.delivered|length) }}
+          </div>
+          <div style="font-size:12px;color:#047857;padding-top:3px;">
+            {% if data.delivered %}
+              {% for p in data.delivered[:8] %}
+              {{ p.tracking_no }}{% if p.store_code %} ({{ p.store_code }}){% endif %}{% if not loop.last %} &middot; {% endif %}
+              {% endfor %}
+              {% if data.delivered|length > 8 %} &middot; {{ t('mail.today.more', count=data.delivered|length - 8) }}{% endif %}
+            {% else %}
+              {{ t('mail.today.none') }}
+            {% endif %}
+          </div>
+          {% if data.pod_zip_count %}
+          <div style="font-size:12px;color:#047857;padding-top:6px;">
+            {{ t('mail.today.pods', count=data.pod_zip_count)|safe }}
+          </div>
+          {% endif %}
+        </td></tr>
+      </table>
+    </td></tr>
+
+    {# --- Mudahale bekleyenler seridi --- #}
+    {% if data.problem_total %}
+    <tr><td style="padding:12px 24px 0 24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;">
+        <tr><td style="padding:12px 14px;">
+          <div style="font-size:13px;font-weight:700;color:#9f1239;">
+            {{ t('mail.problems.heading', count=data.problem_total) }}
+          </div>
+          <div style="font-size:12px;color:#be123c;padding-top:3px;">
+            {{ t('mail.problems.breakdown',
+                 exception=data.exceptions|length, damaged=data.damaged|length,
+                 partial=data.partial|length,
+                 pod_missing=data.pod_missing|length, stale=data.stale|length,
+                 not_handed_over=data.not_handed_over|length,
+                 returned=data.returned|length)|safe }}
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>
+    {% endif %}
+
+    {# --- Ek bilgisi --- #}
+    <tr><td style="padding:16px 24px 0 24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+        <tr><td style="padding:14px;font-size:13px;color:#334155;line-height:1.6;">
+          {% if data.detail_rows %}
+          {{ t('mail.excel.note', rows=data.detail_rows, problems=data.problem_total)|safe }}
+          {% else %}
+          {{ t('mail.excel.none') }}
+          {% endif %}
+        </td></tr>
+      </table>
+    </td></tr>
+
+    {% if data.panel_url %}
+    <tr><td style="padding:18px 24px 0 24px;" align="center">
+      <a href="{{ data.panel_url }}"
+         style="display:inline-block;background:#1e293b;color:#ffffff;text-decoration:none;
+                font-size:13px;font-weight:600;padding:10px 22px;border-radius:6px;">
+        {{ t('mail.open_panel') }}
+      </a>
+    </td></tr>
+    {% endif %}
+
+    <tr><td style="padding:20px 24px 22px 24px;">
+      <div style="border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;line-height:1.5;">
+        {{ t('mail.footer')|safe }}
+      </div>
+    </td></tr>
+
+  </table>
+  </td></tr>
+</table>
+</body>
+</html>

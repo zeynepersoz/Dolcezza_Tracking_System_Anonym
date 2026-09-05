@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ t('archive.title') }}{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header flex items-center justify-between gap-4 flex-wrap">
+    <div>
+      <div class="card-title">{{ t('archive.title') }}</div>
+      {# Kirinti yolu sabit alt basligin YERINE gecer: klasorde gezerken
+         "neredeyim" sorusu degismeyen bir aciklamadan daha degerli. #}
+      <div class="card-subtitle flex items-center gap-1.5 flex-wrap">
+        {% for c in crumbs %}
+          {% if not loop.last %}
+          <a href="{{ c.url }}" class="hover:text-slate-700 hover:underline">{{ c.label }}</a>
+          <span class="text-slate-300">/</span>
+          {% else %}
+          <span class="font-semibold text-slate-600">{{ c.label }}</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Arama BULUNULAN KLASORU de tasir (hx-include="closest form"): klasor
+       tasinmazsa arama kutusu her temizlendiginde koke donuluyordu. Belge turu
+       artik ayri bir suzgec DEGIL, en ust klasor seviyesi. #}
+    <form class="flex items-end gap-2" onsubmit="return false">
+      <input type="hidden" name="kind" value="{{ kind }}">
+      <input type="hidden" name="season" value="{{ season }}">
+      <input type="hidden" name="country" value="{{ country }}">
+      <input type="hidden" name="store" value="{{ store }}">
+      <input type="hidden" name="day" value="{{ day }}">
+      <div>
+        <label class="field-label" for="q">{{ t('archive.search') }}</label>
+        <input class="input w-72" type="search" id="q" name="q" value="{{ q }}"
+               placeholder="{{ t('archive.search_hint') }}"
+               hx-get="/archive/rows" hx-target="#archive-content" hx-swap="innerHTML"
+               hx-trigger="input changed delay:300ms, search"
+               hx-include="closest form">
+      </div>
+    </form>
+  </div>
+
+  <div id="archive-content">
+    {% include "_partials/archive_content.html" %}
+  </div>
+</div>
+{% endblock %}

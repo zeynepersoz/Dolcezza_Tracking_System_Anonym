@@ -1,0 +1,452 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.tracking') }}{% endblock %}
+
+{% block content %}
+{# Yazma yetkisi: sayfanin KENDISI `viewer`a acik ama yukle/senkron/tara
+   dugmeleri degil. Olcut `auth/access.py` — 403 veren yerle ayni kaynak,
+   yoksa dugme gorunur ama tiklayinca hata verir. #}
+{% set may_write = can(request.state.user.role if request.state.user else '', '/labels') %}
+<div class="max-w-[1600px] mx-auto flex gap-6 items-start">
+
+  <!-- Sol filtre paneli (gercek GLS Track&Trace ekranindaki sol panelden esinlenildi) -->
+  <aside class="w-64 shrink-0 filter-panel-wrap">
+    {# Istek TEK yerden gider (#tracking-table, hx-include ile): sol panel ve ust
+       huni menusu ayni parametre adlarini paylasiyor, iki kez sorgulamayalim. #}
+    <form class="filter-panel" onsubmit="return false"
+          oninput="filtersChanged(event.target)" onchange="filtersChanged(event.target)">
+      <div class="filter-panel-title">
+        <h3>{{ t('common.filters')|upper }}</h3>
+        {% if active_filter_count %}<span class="badge badge-blue">{{ t('tracking.active_count', count=active_filter_count) }}</span>{% endif %}
+      </div>
+
+      {# Panelin "Bugun teslim edilen" kartindan gelinir. Gizli ama FORMUN ICINDE
+         olmali: tablo her 30 saniyede kendini `hx-include` ile yeniliyor, disarida
+         kalsaydi filtre yarim dakika sonra sessizce kaybolurdu. Kullanici neden
+         suzuldugunu gorsun diye yaninda kaldirilabilir bir etiket var. #}
+      <input type="hidden" name="delivered_day" value="{{ filter_delivered_day }}">
+      {# Sayfa numarasi da FORMDA: tablo 30 saniyede bir kendini `hx-include` ile
+         yeniliyor, disarida kalsaydi kullanici 3. sayfaya bakarken yarim dakika
+         sonra sessizce 1. sayfaya donerdi. #}
+      <input type="hidden" name="page" value="1">
+      {% if filter_delivered_day %}
+      <div class="filter-field">
+        <span class="badge badge-emerald inline-flex items-center gap-1.5">
+          {{ t('dash.delivered_today') }}
+          <button type="button" onclick="clearDeliveredDay()" class="hover:text-slate-900" aria-label="{{ t('common.clear') }}">&times;</button>
+        </span>
+      </div>
+      {% endif %}
+
+      <div class="filter-field">
+        <label class="field-label">{{ t('tracking.f.search') }}</label>
+        <input type="text" name="search" value="{{ filter_search }}" placeholder="{{ t('tracking.ph.search') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.tracking_no') }}</label>
+        <input type="text" name="f_tracking_no" value="{{ f.tracking_no }}" placeholder="{{ t('tracking.ph.tracking_no') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.reference') }}</label>
+        <input type="text" name="f_reference" value="{{ f.reference }}" placeholder="{{ t('tracking.ph.any') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('tracking.f.store_code') }}</label>
+        <input type="text" name="f_store_code" value="{{ f.store_code }}" placeholder="{{ t('tracking.ph.any') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.invoice_number') }}</label>
+        <input type="text" name="f_invoice_number" value="{{ f.invoice_number }}" placeholder="{{ t('tracking.ph.any') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.emc_invoices') }}</label>
+        <input type="text" name="f_emc_invoices" value="{{ f.emc_invoices }}" placeholder="{{ t('tracking.ph.any') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.consignee') }}</label>
+        <input type="text" name="f_consignee_name" value="{{ f.consignee_name }}" placeholder="{{ t('tracking.ph.consignee') }}" class="input">
+      </div>
+      {# Posta kodu / satis temsilcisi / sevkiyat yontemi kutulari KALDIRILDI:
+         ucu de MSSQL'de hic dolmuyor (olculdu 2026-08: 994 parcada sirasiyla
+         0, 0, 0 dolu satir), yani kutuya ne yazilsa sonuc bos donuyordu.
+         Alanlar `FILTER_FIELDS`ta duruyor — Excel'den gelen eski kayitlar icin
+         uc hala calisir, yalnizca ekranda yer kaplamiyor. #}
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.country') }}</label>
+        <input type="text" name="f_country" value="{{ f.country }}" placeholder="{{ t('tracking.ph.country') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.shipment_date') }}</label>
+        <input type="text" name="f_shipment_date" value="{{ f.shipment_date }}" placeholder="{{ t('tracking.ph.date') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.delivered_date') }}</label>
+        <input type="text" name="f_delivered_date" value="{{ f.delivered_date }}" placeholder="{{ t('tracking.ph.date') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('tracking.f.status') }}</label>
+        <select name="status" class="input">
+          <option value="">{{ t('tracking.status_any') }}</option>
+          {# Statu adlari `status_label()` uzerinden — rozetlerle ve Excel'le ayni kaynak. #}
+          {% for code in ['created', 'in_transit', 'out_for_delivery', 'delivered', 'exception', 'returned', 'cancelled'] %}
+          <option value="{{ code }}" {% if filter_status == code %}selected{% endif %}>{{ status_label(code) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.season') }}</label>
+        <select name="season" class="input">
+          <option value="">{{ t('tracking.season_any') }}</option>
+          {# Secenekler ERP'deki gercek sezonlardan; elle liste tutulmaz ki yeni
+             sezon acildiginda kimse burayi guncellemeyi unutmasin. #}
+          {% for code, label, count, checked in season_options %}
+          <option value="{{ code }}" {% if checked %}selected{% endif %}>{{ label }} ({{ count }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.shipment_method') }}</label>
+        <select name="shipment_method" class="input">
+          <option value="">{{ t('tracking.shipment_method_any') }}</option>
+          {% for code, label, count, checked in shipment_method_options %}
+          <option value="{{ code }}" {% if checked %}selected{% endif %}>{{ label }} ({{ count }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('tracking.f.channel') }}</label>
+        <select name="channel" class="input">
+          <option value="">{{ t('tracking.channel_any') }}</option>
+          <option value="NL" {% if filter_channel == 'NL' %}selected{% endif %}>{{ t('tracking.channel_nl') }}</option>
+          <option value="IE" {% if filter_channel == 'IE' %}selected{% endif %}>{{ t('tracking.channel_ie') }}</option>
+          <option value="FEDEX" {% if filter_channel == 'FEDEX' %}selected{% endif %}>{{ t('tracking.channel_fedex') }}</option>
+        </select>
+      </div>
+
+      <button type="button" onclick="resetFilters()" class="btn btn-ghost btn-sm w-full mt-3">
+        {{ t('tracking.reset_filters') }}
+      </button>
+    </form>
+  </aside>
+
+  <!-- Sag icerik -->
+  <div class="flex-1 min-w-0 space-y-6">
+    <div class="card overflow-hidden">
+      <div class="card-header flex items-center justify-between">
+        <div>
+          <h2 class="card-title">{{ t('tracking.list_title') }}</h2>
+          <p class="card-subtitle">{{ t('tracking.list_note')|safe }}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <details id="export-panel" class="relative">
+            <summary class="cursor-pointer list-none btn btn-secondary btn-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"/>
+              </svg>
+              {{ t('export.menu') }}
+            </summary>
+            <div class="absolute right-0 mt-2 w-64 card shadow-lg p-3 z-30 space-y-1">
+              <p class="text-xs text-slate-500 px-1 pb-1">{{ t('export.note') }}</p>
+              <button type="button" onclick="exportList('xlsx')"
+                      class="btn btn-ghost btn-sm w-full justify-start">
+                {{ t('export.xlsx') }}
+              </button>
+              <button type="button" onclick="exportList('pdf')"
+                      class="btn btn-ghost btn-sm w-full justify-start">
+                {{ t('export.pdf') }}
+              </button>
+            </div>
+          </details>
+          {% if may_write %}
+          {% if mssql_ready %}
+          <details id="mssql-panel" class="relative">
+            <summary class="cursor-pointer list-none btn btn-secondary btn-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 7v10c0 1.66 3.58 3 8 3s8-1.34 8-3V7M4 7c0 1.66 3.58 3 8 3s8-1.34 8-3M4 7c0-1.66 3.58-3 8-3s8 1.34 8 3"/>
+              </svg>
+              {{ t('tracking.mssql') }}
+            </summary>
+            <div class="absolute right-0 mt-2 w-96 card shadow-lg p-4 z-30">
+              <h3 class="text-sm font-semibold text-slate-800 mb-1">Sentez / BlueCherry</h3>
+              <p class="text-xs text-slate-500 mb-3">{{ t('tracking.mssql_note') }}</p>
+              <button hx-post="/tracking/sync-mssql" hx-target="#mssql-result" hx-swap="innerHTML"
+                      hx-indicator="#mssql-busy" hx-disabled-elt="this" class="btn btn-primary w-full">
+                {{ t('tracking.mssql_submit') }}
+              </button>
+              <p id="mssql-busy" class="htmx-indicator text-xs text-slate-500 mt-2">
+                {{ t('tracking.mssql_busy') }}
+              </p>
+              <div id="mssql-result" class="mt-3"></div>
+            </div>
+          </details>
+          {% endif %}
+          <button hx-post="/tracking/refresh" hx-swap="none" hx-disabled-elt="this"
+                  hx-on::after-request="htmx.trigger('#tracking-table', 'refresh')"
+                  class="btn btn-secondary btn-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            {{ t('tracking.scan_now') }}
+          </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <div id="pick-bar" class="hidden items-center gap-3 px-5 py-3 bg-amber-50 border-b border-amber-200">
+        <span id="pick-count" class="text-sm font-medium text-slate-800"></span>
+        <form method="post" action="/tracking/contents/export.xlsx" id="pick-form" class="contents">
+          <button type="submit" class="btn btn-accent btn-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"/>
+            </svg>
+            {{ t('export.bulk_contents') }}
+          </button>
+        </form>
+        <button type="button" onclick="clearPicks()" class="btn btn-ghost btn-sm">
+          {{ t('export.clear_selection') }}
+        </button>
+      </div>
+
+      <!-- Tablo -->
+      <div id="tracking-table" class="table-scroll"
+           hx-get="/tracking/rows"
+           hx-trigger="refresh from:body, every 30s"
+           hx-target="#tracking-tbody"
+           hx-include="[name='search'],[name='status'],[name='channel'],[name='season'],[name='shipment_method'],[name='delivered_day'],[name='page'],[name^='f_']"
+           hx-swap="innerHTML">
+        <table class="data-table">
+          {% macro text_filter(name, label, placeholder) %}
+          <th>
+            <div class="relative inline-flex items-center gap-1" x-data="{o:false}" @click.outside="o=false">
+              <span>{{ label }}</span>
+              <button type="button" @click="o=!o" class="th-funnel" aria-label="{{ label }}">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 4h18l-7 8v6l-4 2v-8z"/>
+                </svg>
+              </button>
+              <div x-show="o" x-cloak x-transition @keydown.escape="o=false"
+                   class="absolute top-full left-0 mt-1 w-56 p-2 bg-white border border-slate-200 rounded-lg shadow-lg z-20">
+                <input type="text" name="f_{{ name }}" value="{{ f[name] }}" placeholder="{{ placeholder }}"
+                       class="input text-xs py-1" oninput="filtersChanged(this)">
+                <button type="button" class="mt-1 w-full btn btn-ghost btn-sm"
+                        onclick="const i = this.previousElementSibling; i.value = ''; filtersChanged(i);">
+                  {{ t('common.clear') }}
+                </button>
+              </div>
+            </div>
+          </th>
+          {% endmacro %}
+
+          {% macro choice_filter(name, label, options) %}
+          <th>
+            <div class="relative inline-flex items-center gap-1" x-data="{o:false}" @click.outside="o=false">
+              <span>{{ label }}</span>
+              <button type="button" @click="o=!o" class="th-funnel" aria-label="{{ label }}">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 4h18l-7 8v6l-4 2v-8z"/>
+                </svg>
+              </button>
+              <div x-show="o" x-cloak x-transition @keydown.escape="o=false"
+                   class="absolute top-full left-0 mt-1 w-60 p-2 bg-white border border-slate-200 rounded-lg shadow-lg z-20">
+                {% for code, text, count, checked in options %}
+                <label class="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-slate-50 cursor-pointer text-xs font-normal normal-case tracking-normal text-slate-700">
+                  <input type="checkbox" name="{{ name }}" value="{{ code }}" {% if checked %}checked{% endif %}
+                         onchange="filtersChanged(this)">
+                  <span class="flex-1 truncate">{{ text }}</span>
+                  <span class="text-slate-400 tabular-nums">{{ count }}</span>
+                </label>
+                {% endfor %}
+                <button type="button" class="mt-1 w-full btn btn-ghost btn-sm"
+                        onclick="const b = this.parentElement.querySelectorAll('input');
+                                 b.forEach(i => i.checked = false); filtersChanged(b[0]);">
+                  {{ t('common.clear') }}
+                </button>
+              </div>
+            </div>
+          </th>
+          {% endmacro %}
+
+          <thead>
+            <tr>
+              <th class="w-8">
+                <input type="checkbox" id="pick-all" onchange="pickAll(this)"
+                       aria-label="{{ t('export.select_all') }}">
+              </th>
+              {{ choice_filter('channel', t('field.channel'), channel_options) }}
+              {{ text_filter('tracking_no', t('field.tracking_no'), t('tracking.ph.tracking_no')) }}
+              {{ text_filter('store_code', t('field.store_code'), t('tracking.ph.any')) }}
+              {{ text_filter('invoice_number', t('field.invoice_number'), t('tracking.ph.any')) }}
+              {{ text_filter('consignee_name', t('field.consignee'), t('tracking.ph.consignee')) }}
+              {{ choice_filter('season', t('field.season'), season_options) }}
+              {{ choice_filter('status', t('field.status'), status_options) }}
+              {{ text_filter('shipment_date', t('tracking.col.dates'), t('tracking.ph.date')) }}
+              {{ choice_filter('shipment_method', t('field.shipment_method'), shipment_method_options) }}
+              <th class="text-right">{{ t('field.pod') }}</th>
+            </tr>
+          </thead>
+          <tbody id="tracking-tbody">
+            {% include '_partials/tracking_rows.html' %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Detay yan paneli (panelle ortak) -->
+{% include "_partials/detail_drawer.html" %}
+<script>
+  // ---- Filtreler: sol panel <-> sutun basligi huni menusu ------------------
+  // Ikisi de ayni parametre adlarini kullaniyor; kullanici hangisine dokunursa
+  // digeri ona esitlenir, sonra tablo TEK istekle yenilenir.
+  function syncFilters(src) {
+    const name = src.name;
+    if (name === 'status' || name === 'channel' || name === 'season') {
+      const boxes = [...document.querySelectorAll(`input[type=checkbox][name='${name}']`)];
+      const select = document.querySelector(`select[name='${name}']`);
+      if (src.tagName === 'SELECT') {
+        boxes.forEach(b => b.checked = b.value === src.value);
+      } else {
+        const checked = boxes.filter(b => b.checked);
+        // Sol panel tek secimli: coklu ya da bos secim orada "hepsi" gorunur.
+        select.value = checked.length === 1 ? checked[0].value : '';
+      }
+    } else if (name.startsWith('f_')) {
+      document.querySelectorAll(`input[name='${name}']`)
+              .forEach(i => { if (i !== src) i.value = src.value; });
+    }
+  }
+
+  // ---- Disa aktarma ---------------------------------------------------------
+  // Alan listesi tablonun `hx-include`'uyla AYNI olmali: dosya ekranda gorunen
+  // satirlari icermeli, yoksa kullanici suzup indirdigi seyi bulamaz.
+  const EXPORT_FIELDS = "[name='search'],[name='status'],[name='channel']," +
+                        "[name='season'],[name='shipment_method'],[name='delivered_day'],[name^='f_']";
+
+  function exportList(kind) {
+    const params = new URLSearchParams();
+    document.querySelectorAll(EXPORT_FIELDS).forEach(el => {
+      if (el.type === 'checkbox' && !el.checked) return;
+      if (!el.value) return;
+      // Ayni suzgec iki yerde duruyor (sol panel + sutun huni menusu);
+      // `syncFilters` onlari esitliyor, aynisini iki kez yollamayalim.
+      if (params.getAll(el.name).includes(el.value)) return;
+      params.append(el.name, el.value);
+    });
+    window.location = `/tracking/export.${kind}?${params}`;
+    document.getElementById('export-panel').open = false;
+  }
+
+  // ---- Koli secimi (musteri bazli icerik Excel'i) ---------------------------
+  // Tablo 30 saniyede bir satirlari degistiriyor; secim DOM'da tutulamaz.
+  // Dogru kaynak bu kume, tikler ondan turetilir.
+  const picked = new Set();
+  const PICK_LIMIT = {{ bulk_limit }};
+
+  function renderPicks() {
+    const bar = document.getElementById('pick-bar');
+    bar.classList.toggle('hidden', picked.size === 0);
+    bar.classList.toggle('flex', picked.size > 0);
+    document.getElementById('pick-count').textContent =
+      {{ t('export.selected', count='%COUNT%')|tojson }}.replace('%COUNT%', picked.size);
+    // Gizli alanlar her degisimde yeniden yazilir: form gonderildiginde
+    // kumede ne varsa o gider, ekranda o an hangi satirlarin durdugu onemsiz.
+    const form = document.getElementById('pick-form');
+    form.querySelectorAll("input[name='tracking_no']").forEach(i => i.remove());
+    picked.forEach(no => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'tracking_no';
+      input.value = no;
+      form.appendChild(input);
+    });
+    syncPickBoxes();
+  }
+
+  function syncPickBoxes() {
+    const boxes = [...document.querySelectorAll('.row-pick')];
+    boxes.forEach(b => b.checked = picked.has(b.value));
+    const all = document.getElementById('pick-all');
+    if (all) all.checked = boxes.length > 0 && boxes.every(b => b.checked);
+  }
+
+  function pickChanged(box) {
+    if (box.checked && picked.size >= PICK_LIMIT && !picked.has(box.value)) {
+      box.checked = false;
+      alert({{ t('export.too_many', limit='%LIMIT%', count='%LIMIT%')|tojson }}
+              .replaceAll('%LIMIT%', PICK_LIMIT));
+      return;
+    }
+    box.checked ? picked.add(box.value) : picked.delete(box.value);
+    renderPicks();
+  }
+
+  function pickAll(box) {
+    document.querySelectorAll('.row-pick').forEach(b => {
+      if (box.checked) {
+        if (picked.size < PICK_LIMIT) picked.add(b.value);
+      } else {
+        picked.delete(b.value);
+      }
+    });
+    renderPicks();
+  }
+
+  function clearPicks() {
+    picked.clear();
+    renderPicks();
+  }
+
+  // Otomatik yenilemeden sonra tikleri geri koy — sayfayi acik birakan
+  // kullanicinin secimi 30 saniye sonra sessizce kaybolmasin.
+  document.body.addEventListener('htmx:afterSwap', e => {
+    if (e.target.id === 'tracking-tbody') syncPickBoxes();
+  });
+
+  let filterTimer;
+  function filtersChanged(src) {
+    if (src && src.name) syncFilters(src);
+    // Her suzgec degisiminde BASA don: 7. sayfada "Ahaa" yazan kullanici
+    // 3 sonuclu bir listenin 7. sayfasina bakip "kayit yok" gorurdu.
+    setPage(1);
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(() => htmx.trigger('#tracking-table', 'refresh'), 250);
+  }
+
+  function setPage(n) {
+    const el = document.querySelector("[name='page']");
+    if (el) el.value = n;
+  }
+
+  function goToPage(n) {
+    setPage(n);
+    htmx.trigger('#tracking-table', 'refresh');
+    // Yeni sayfa BASINDAN okunsun; 100 satirin dibinden gelindi.
+    document.getElementById('tracking-table').scrollTop = 0;
+  }
+
+  function clearDeliveredDay() {
+    const el = document.querySelector("[name='delivered_day']");
+    if (el) el.value = '';
+    // Etiket sunucudan geliyor; sayfayi tazelemek yerine gizlemek yeterli.
+    document.querySelectorAll("[onclick='clearDeliveredDay()']")
+            .forEach(b => b.closest('.filter-field').remove());
+    filtersChanged(null);
+  }
+
+  // Temizlemek SAYFAYI DEGISTIRIR, alanlari tek tek bosaltmaz. Panelden
+  // "Tümünü gör" ile gelindiginde adres `?delivered_day=2026-08-19` oluyor:
+  // alanlari JS ile bosaltmak tabloyu tazeliyor ama adres, yesil "Bugün teslim
+  // edilen" etiketi ve "3 filtre" rozeti SUNUCUDAN gelmisti, oldugu yerde
+  // kaliyordu — kullanici temizledigini sanip yenileyince filtre geri geliyordu.
+  function resetFilters() {
+    window.location = '/tracking';
+  }
+
+</script>
+{% endblock %}

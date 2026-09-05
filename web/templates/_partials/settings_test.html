@@ -1,0 +1,18 @@
+{# providers.doctor() bicimini oldugu gibi alir: {name, title, configured, ok, detail} #}
+<div class="space-y-2">
+  {% for r in results %}
+  <div class="flex items-start gap-3 text-sm p-3 rounded-lg border
+       {% if r.ok is none %}bg-slate-50 border-slate-200
+       {% elif r.ok %}bg-emerald-50 border-emerald-200
+       {% else %}bg-rose-50 border-rose-200{% endif %}">
+    <span class="badge shrink-0 mt-0.5
+          {% if r.ok is none %}badge-slate{% elif r.ok %}badge-emerald{% else %}badge-rose{% endif %}">
+      {% if r.ok is none %}—{% elif r.ok %}OK{% else %}{{ t('settings.test_error') }}{% endif %}
+    </span>
+    <div class="min-w-0">
+      <div class="font-medium text-slate-800">{{ r.title }}</div>
+      <div class="text-slate-600 break-words">{{ r.detail }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>

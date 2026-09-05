@@ -1,0 +1,182 @@
+{# Takip tablosu icin sadece <tr> parcalari - HTMX ile yeniden yuklenir.
+
+   `quick` yalnizca paneldeki hizli aramadan gelir (`/tracking/quick`): orada
+   tablo dar bir kutuya sigiyor ve takip no POD'un HEMEN YANINDA isteniyor.
+   `/tracking` sayfasinda sutun sirasi degismez — orada takip no bastadir ve
+   sutun basliklari ayni sirayla suzgec menusu tasiyor. #}
+{% set quick = quick|default(false) %}
+{% for p in parcels %}
+{% set color = status_color(p.status) %}
+<tr class="cursor-pointer" id="parcel-{{ p.tracking_no }}"
+    hx-get="/tracking/detail/{{ p.tracking_no }}" hx-target="#detail-drawer" hx-swap="innerHTML"
+    onclick="openDetail('{{ p.tracking_no }}')">
+  {# Secim kutusu yalnizca /tracking'te: paneldeki hizli arama tablosu dar ve
+     oradan toplu indirme yapilmiyor. Kutuya basmak detay panelini ACMAMALI —
+     POD hucresindeki `stopPropagation` deseninin aynisi. #}
+  {% if not quick %}
+  <td class="w-8" onclick="event.stopPropagation()">
+    <input type="checkbox" class="row-pick" value="{{ p.tracking_no }}"
+           onchange="pickChanged(this)" aria-label="{{ p.tracking_no }}">
+  </td>
+  {% endif %}
+  <td><span class="badge {% if p.channel == 'NL' %}badge-blue{% elif p.channel == 'FEDEX' %}badge-orange{% else %}badge-amber{% endif %}">{{ p.channel }}</span></td>
+  {% if not quick %}
+  <td class="font-mono text-xs text-slate-700 whitespace-nowrap">
+    {% set valid_zip = p.zip_code and p.zip_code != 'undefined' and p.zip_code != 'None' %}
+    {# Ayni desen tracking_detail.html'de — FedEx GLS URL'lerine DUSMEMELI
+       (kullanicinin bulgusu, 2026-08-31). #}
+    {% if p.channel == 'FEDEX' %}
+      {% set gls_url = p.tracking_url if (p.tracking_url and 'undefined' not in p.tracking_url) else ('https://www.fedex.com/fedextrack/?trknbr=' ~ p.tracking_no) %}
+      {% set carrier_label = 'FedEx' %}
+    {% elif p.channel == 'NL' %}
+      {% set gls_url = p.tracking_url if (p.tracking_url and 'undefined' not in p.tracking_url) else ('https://www.gls-info.nl/track-and-trace?parcelno=' ~ p.tracking_no ~ (('&zipcode=' ~ p.zip_code) if valid_zip else '')) %}
+      {% set carrier_label = 'GLS' %}
+    {% else %}
+      {% set gls_url = p.tracking_url if (p.tracking_url and 'undefined' not in p.tracking_url) else ('https://gls-group.eu/IE/en/track-trace?match=' ~ p.tracking_no) %}
+      {% set carrier_label = 'GLS' %}
+    {% endif %}
+    <div class="inline-flex items-center gap-1.5">
+      <span>{{ p.tracking_no }}</span>
+      <a href="{{ gls_url }}" target="_blank" rel="noopener noreferrer"
+         onclick="event.stopPropagation()"
+         class="text-slate-400 hover:text-sky-600 p-0.5 hover:bg-sky-50 rounded transition-colors"
+         title="{{ carrier_label }} Resmi Takip Sayfası (Yeni Sekme)">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+        </svg>
+      </a>
+    </div>
+  </td>
+  {% endif %}
+  {# Magaza kodu kendi sutununda ve BUYUK: Avrupa ofisi koliyi bununla ariyor,
+     eskiden fatura numarasinin altinda kucuk gri bir alt satirdi. #}
+  <td class="font-semibold text-slate-900 whitespace-nowrap">{{ p.store_code or '—' }}</td>
+  <td class="text-xs text-slate-600">{{ p.invoice_number or '—' }}</td>
+  <td>
+    {{ p.consignee_name or '—' }}
+    {% if p.country %}<div class="text-xs text-slate-400">{{ p.country }}{% if p.zip_code %} · {{ p.zip_code }}{% endif %}</div>{% endif %}
+  </td>
+  {# Sezon rozeti ERP'nin `UD_Season` alanindan gelir, kaynak adindan TAHMIN
+     EDILMEZ — yeni sezon acildiginda eski koliler yenisiyle karismasin. #}
+  <td>
+    {% if p.season %}<span class="badge badge-slate">{{ p.season }}</span>
+    {% else %}<span class="text-slate-300">—</span>{% endif %}
+  </td>
+  <td>
+    <span class="badge badge-{{ color }}">
+      <span class="badge-dot"></span>
+      {{ status_label(p.status) }}
+    </span>
+  </td>
+  <td class="text-xs text-slate-500">
+    {% if p.shipment_date %}<div>{{ p.shipment_date }}</div>{% endif %}
+    {# `shipment_date` yalniz gundur, cevrilmez; `delivered_date` GLS'in UTC
+       damgasi — yerel saate getirilir (bkz. timez). #}
+    {% if p.delivered_date %}<div class="text-emerald-600">→ {{ p.delivered_date|localtime or p.delivered_date }}</div>{% endif %}
+    {% if not p.shipment_date and not p.delivered_date %}—{% endif %}
+  </td>
+  {% if not quick %}
+  <td class="text-xs text-slate-600 whitespace-nowrap">
+    {% if p.shipment_method %}
+      <span class="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">{{ p.shipment_method }}</span>
+    {% else %}
+      <span class="text-slate-300">—</span>
+    {% endif %}
+  </td>
+  {% endif %}
+  {# Panelde takip no BURADA, POD'un hemen yaninda: dar kutuda POD'a ulasmak icin
+     yatay kaydirinca sol uctaki takip no gorunmez oluyordu — hangi satirdaki
+     POD'a tiklandigi belirsiz kaliyordu. #}
+  {% if quick %}<td class="font-mono text-xs text-slate-700">{{ p.tracking_no }}</td>{% endif %}
+  {# Teslim edilmis her satirda yesil "POD" yaziyordu; belgesi olmayanda bag
+     404'e goturuyordu. Belge diskte mi degil mi ayirt edilir: yoksa sari unlem
+     (yine tiklanabilir — GLS gorüntüyü teslimattan saatler sonra uretebiliyor). #}
+  <td class="text-right" onclick="event.stopPropagation()">
+    {# FedEx'te POD KAVRAMI YOK (bkz. gls_api/providers.py:pod_provider_for —
+       FEDEX icin bilincli None doner). "POD eksik" uyarisi orada yanlis alarm:
+       hicbir zaman gelmeyecek bir belgeyi bekletiyordu. Yerine elle yuklenen
+       Gonderi Detaylari PDF'i gosterilir; yoksa yalnizca cizgi. #}
+    {% if p.channel == 'FEDEX' %}
+      {% if p.box_image_path %}
+        <a href="/tracking/box-image/download/{{ p.tracking_no }}"
+           title="{{ t('tracking.detail.box_image') }}"
+           class="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-800 text-xs font-medium">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"/>
+          </svg>
+          {{ t('tracking.detail.box_image_short') }}
+        </a>
+      {% else %}
+        <span class="text-slate-300 text-sm" title="{{ t('tracking.detail.box_image_missing') }}">—</span>
+      {% endif %}
+    {% elif p.status != 'delivered' %}
+      <span class="text-slate-300 text-sm">—</span>
+    {% elif p.pod_path %}
+      <a href="/pod/download/{{ p.tracking_no }}" title="{{ t('pod.customer_pdf_title') }}"
+         class="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-800 text-xs font-medium">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"/>
+        </svg>
+        POD
+      </a>
+    {% elif p.issue_text %}
+      <button type="button" onclick="openDetail('{{ p.tracking_no }}')"
+              title="{{ p.issue_text }}"
+              class="inline-flex items-center gap-1 text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-2 py-0.5 rounded text-xs font-medium transition-colors">
+        <span class="text-[11px]">🔑</span>
+        <span class="truncate max-w-[90px]">{{ p.issue_text }}</span>
+      </button>
+    {% else %}
+      <a href="/pod/download/{{ p.tracking_no }}" title="{{ t('pod.missing_title') }}"
+         class="inline-flex items-center gap-1 text-amber-600 hover:text-amber-800 text-xs font-medium">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+        {{ t('pod.missing') }}
+      </a>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+{% if not parcels %}
+<tr><td colspan="{{ 9 if quick else 11 }}" class="!py-12 text-center text-slate-400">
+  {# `searched` yalnizca paneldeki hizli aramadan gelir: daha hicbir sey
+     yazilmadiginda "kayit yok" demek yanlis olur, ne yazilacagi soylenir. #}
+  {% if searched is defined and not searched %}
+    {{ t('dash.search_hint') }}
+  {% else %}
+    {{ t('tracking.empty') }}
+  {% endif %}
+</td></tr>
+{% endif %}
+{% if truncated %}
+<tr><td colspan="{{ 9 if quick else 11 }}" class="!py-2 text-center text-xs text-amber-600 bg-amber-50">
+  {{ t('common.truncated', count=parcels|length) }} {{ t('tracking.narrow_hint') }}
+</td></tr>
+{% endif %}
+{#
+  Sayfa oklari TABLONUN ICINDE, son satir olarak. HTMX yalnizca `#tracking-tbody`i
+  takas ediyor; disarida bir yerde dursaydi sayfa degisince "1-100 / 986" yazisi
+  eski sayfada kalirdi. `pages` yalnizca /tracking uclarindan gelir — paneldeki
+  hizli aramada (`quick`) sayfalama yok, ilk 50 satir yeter.
+#}
+{% if pages is defined and pages > 1 %}
+<tr class="bg-slate-50 border-t border-slate-200">
+  <td colspan="10" class="!py-2">
+    <div class="flex items-center justify-center gap-4 text-xs text-slate-600">
+      <button type="button" onclick="goToPage({{ page - 1 }})"
+              {% if page <= 1 %}disabled{% endif %}
+              class="btn btn-ghost btn-sm disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="{{ t('common.prev_page') }}">&lsaquo;</button>
+      <span>{{ t('common.page_range', a=page_from, b=page_to, total=total) }}</span>
+      <button type="button" onclick="goToPage({{ page + 1 }})"
+              {% if page >= pages %}disabled{% endif %}
+              class="btn btn-ghost btn-sm disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="{{ t('common.next_page') }}">&rsaquo;</button>
+    </div>
+  </td>
+</tr>
+{% endif %}

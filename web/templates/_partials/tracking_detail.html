@@ -1,0 +1,635 @@
+{% set color = status_color(p.status) %}
+<div class="flex flex-col h-full detail-drawer-root">
+  <!-- Header -->
+  <div class="detail-drawer-head border-b border-slate-100 flex items-start justify-between">
+    <div>
+      <div class="flex items-center gap-2 mb-2">
+        <span class="badge {% if p.channel == 'NL' %}badge-blue{% elif p.channel == 'FEDEX' %}badge-orange{% else %}badge-amber{% endif %}">{{ p.channel }}</span>
+        <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          {% if p.channel == 'NL' %}GLS Netherlands{% elif p.channel == 'FEDEX' %}FedEx{% else %}GLS Ireland{% endif %}
+        </span>
+      </div>
+      {% set valid_zip = p.zip_code and p.zip_code != 'undefined' and p.zip_code != 'None' %}
+      {# FedEx yanitinda hic link alani yok (bkz. tracking/scheduler.py:map_fedex_result) —
+         `p.tracking_url` zaten fedex.com'a kuruludur; burada yalnizca alan
+         hic dolmamissa (eski kayit) son bir yedek olarak ayni URL kurulur.
+         ONCEDEN: FedEx bu dalin DISINDA kalip yanlislikla GLS Irlanda linki
+         aliyordu (kullanicinin bulgusu, 2026-08-31). #}
+      {% if p.channel == 'FEDEX' %}
+        {% set gls_url = p.tracking_url if (p.tracking_url and 'undefined' not in p.tracking_url) else ('https://www.fedex.com/fedextrack/?trknbr=' ~ p.tracking_no) %}
+        {% set carrier_label = 'FedEx Web' %}
+      {% elif p.channel == 'NL' %}
+        {% set gls_url = p.tracking_url if (p.tracking_url and 'undefined' not in p.tracking_url) else ('https://www.gls-info.nl/track-and-trace?parcelno=' ~ p.tracking_no ~ (('&zipcode=' ~ p.zip_code) if valid_zip else '')) %}
+        {% set carrier_label = 'GLS Web' %}
+      {% else %}
+        {% set gls_url = p.tracking_url if (p.tracking_url and 'undefined' not in p.tracking_url) else ('https://gls-group.eu/IE/en/track-trace?match=' ~ p.tracking_no) %}
+        {% set carrier_label = 'GLS Web' %}
+      {% endif %}
+      <div class="flex items-center gap-2">
+        <span class="font-mono text-sm font-bold text-slate-800">{{ p.tracking_no }}</span>
+        <a href="{{ gls_url }}" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-sky-700 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-md transition-all shadow-2xs group"
+           title="{{ carrier_label }} Resmi Takip Sayfası (Yeni Sekmede Aç)">
+          <span>{{ carrier_label }}</span>
+          <svg class="w-3 h-3 text-sky-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+          </svg>
+        </a>
+      </div>
+      <div class="mt-2">
+        <span class="badge badge-{{ color }}">
+          <span class="badge-dot"></span>
+          {{ status_label(p.status) }}
+        </span>
+      </div>
+    </div>
+    <button onclick="closeDetail()" class="text-slate-400 hover:text-slate-800">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Icerik -->
+  <div class="detail-drawer-body flex-1 overflow-y-auto">
+    {#
+      Koli icerigi — TEMBEL yuklenir. `click once`: her detay acilisinda MSSQL'e
+      gidilmez, yalnizca kullanici gercekten "icinde ne var" diye sorunca.
+      Veri SQLite'ta yok, canli sorgulanir (bkz. `erp/contents.py`).
+
+      Bolum panelin EN USTUNDE ve dugme POD indirme ile AYNI sari (`btn-accent`):
+      onceki hali Fatura ile Sevkiyat arasina gomulu gri bir satirdi ve kullanici
+      onu goremiyordu ("pdf indirme butonu gibi goze carpsin").
+    #}
+    <div class="detail-grid-2">
+      {# Koli Icerigi Modali (Ekranin tam ortasinda x-teleport ile acilir) #}
+      <section x-data="{ open: false }">
+        <button type="button" @click="open = true"
+                hx-get="/tracking/contents/{{ p.tracking_no }}"
+                hx-target="#box-contents-body"
+                hx-trigger="click once"
+                hx-swap="innerHTML"
+                class="btn btn-accent w-full justify-center text-xs py-2.5 shadow-2xs">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+          </svg>
+          {{ t('tracking.detail.contents') }}
+        </button>
+
+        <template x-teleport="body">
+          <div x-show="open" x-cloak @keydown.escape.window="open = false"
+               class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" @click="open = false"></div>
+            <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+              <div class="px-6 py-4 border-b border-slate-100 flex items-start justify-between">
+                <div>
+                  <h3 class="font-semibold text-slate-900">{{ t('tracking.detail.contents') }}</h3>
+                  <div class="font-mono text-xs text-slate-500 mt-0.5">{{ p.tracking_no }}</div>
+                </div>
+                <button type="button" @click="open = false" class="text-slate-400 hover:text-slate-800">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
+              <div id="box-contents-body" class="flex-1 overflow-y-auto px-6 py-4">
+                <div class="text-sm text-slate-400">{{ t('common.loading') }}</div>
+              </div>
+              <div class="border-t border-slate-100 p-4 bg-slate-50/70 flex items-center gap-2">
+                <a href="/tracking/contents/{{ p.tracking_no }}/export.xlsx" class="btn btn-ghost">
+                  {{ t('export.xlsx') }}
+                </a>
+                <a href="/tracking/contents/{{ p.tracking_no }}/export.pdf" class="btn btn-ghost">
+                  {{ t('export.pdf') }}
+                </a>
+                <button type="button" @click="open = false" class="btn btn-ghost ml-auto">
+                  {{ t('common.close') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
+
+      {# FedEx'te resmi POD YOK (bkz. gls_api/providers.py:pod_provider_for) —
+         bu ikinci dugme kanala gore TAMAMEN farkli bir modal acar: FedEx'te
+         "Koli Görseli" (fotograf -> PDF), digerlerinde eskisi gibi "POD / Not".
+         Kullanici istegi, 2026-08-31: "box content'in altındaki butona
+         bastığında ortada bir modal açılsın ... koli içeriği takip numarası
+         vs. olacak ... yüklenen resimler pdfe gömülecek". #}
+      {% if p.channel == 'FEDEX' %}
+      {# Koli Görseli Modali (FedEx) — POD/Not modalinin yerini alir #}
+      <section x-data="{ open: false }">
+        <button type="button" @click="open = true"
+                hx-get="/tracking/contents/{{ p.tracking_no }}"
+                hx-target="#box-image-contents-body"
+                hx-trigger="click once"
+                hx-swap="innerHTML"
+                class="btn btn-secondary w-full justify-center text-xs py-2.5 shadow-2xs gap-1.5">
+          <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M14 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+          <span>{{ t('tracking.detail.box_image') }}</span>
+          {% if p.box_image_path %}
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500" title="{{ t('tracking.detail.box_image_ready') }}"></span>
+          {% endif %}
+        </button>
+
+        <template x-teleport="body">
+          <div x-show="open" x-cloak @keydown.escape.window="open = false"
+               class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" @click="open = false"></div>
+            <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col">
+              <div class="px-6 py-4 border-b border-slate-100 flex items-start justify-between">
+                <div>
+                  <h3 class="font-semibold text-slate-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M14 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    {{ t('tracking.detail.box_image_title') }}
+                  </h3>
+                  <div class="font-mono text-xs text-slate-500 mt-1 flex items-center gap-2">
+                    <span>{{ p.tracking_no }}</span>
+                    {% if p.store_code %}<span>· {{ p.store_code }}</span>{% endif %}
+                    {% if p.invoice_number %}<span>· Fat: {{ p.invoice_number }}</span>{% endif %}
+                  </div>
+                </div>
+                <button type="button" @click="open = false" class="text-slate-400 hover:text-slate-800">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
+
+              <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                {# Mevcut durum karti #}
+                <div class="p-3.5 rounded-xl border {% if p.box_image_path %}border-emerald-200 bg-emerald-50/70 text-emerald-900{% else %}border-slate-200 bg-slate-50/80 text-slate-700{% endif %} flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-2 text-xs font-semibold">
+                    {% if p.box_image_path %}
+                      <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold">✓</span>
+                      <span>{{ t('tracking.detail.box_image_ready') }}</span>
+                    {% else %}
+                      <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold">!</span>
+                      <span>{{ t('tracking.detail.box_image_missing') }}</span>
+                    {% endif %}
+                  </div>
+                  {% if p.box_image_path %}
+                    <div class="flex items-center gap-1 flex-shrink-0">
+                      <a href="/tracking/box-image/download/{{ p.tracking_no }}" class="btn btn-ghost text-xs text-emerald-800 hover:bg-emerald-100">
+                        ⬇ {{ t('tracking.detail.box_image_download') }}
+                      </a>
+                      {# Belge varken uzerine ekleme yok; yenisi icin once bu kaldirilir. #}
+                      <button hx-post="/tracking/box-image/delete/{{ p.tracking_no }}"
+                              hx-target="#detail-drawer" hx-swap="innerHTML"
+                              hx-confirm="{{ t('tracking.detail.box_image_remove_confirm') }}"
+                              class="btn btn-ghost text-xs text-rose-700 hover:bg-rose-100">
+                        ✕ {{ t('tracking.detail.box_image_remove') }}
+                      </button>
+                    </div>
+                  {% endif %}
+                </div>
+
+                {# Koli icerigi onizlemesi — "Koli Icerigi" dugmesiyle AYNI uc noktayi
+                   kullanir, ayri bir hedefe (bkz. yukaridaki hx-target). #}
+                <div class="space-y-2">
+                  <div class="text-xs font-bold text-slate-800 uppercase tracking-wider">{{ t('tracking.detail.contents') }}</div>
+                  <div id="box-image-contents-body" class="bg-slate-50 rounded-xl p-3.5 text-sm">
+                    <div class="text-sm text-slate-400">{{ t('common.loading') }}</div>
+                  </div>
+                </div>
+
+                {# Fotograf yukleme (coklu secim) — sadece henuz yuklenmediyse gosterilir #}
+                {% if not p.box_image_path %}
+                <div class="space-y-2 pt-4 border-t border-slate-100">
+                  <div class="text-xs font-bold text-slate-800 uppercase tracking-wider">{{ t('tracking.detail.box_image_title') }}</div>
+                  <div class="text-xs text-slate-500">{{ t('tracking.detail.box_image_note') }}</div>
+                  <form hx-post="/tracking/box-image/upload/{{ p.tracking_no }}"
+                        hx-target="#detail-drawer"
+                        hx-swap="innerHTML"
+                        hx-encoding="multipart/form-data">
+                    <label for="detail-box-image-upload-{{ p.tracking_no }}"
+                           x-data="{ dragging: false }"
+                           @dragover.prevent="dragging = true"
+                           @dragenter.prevent="dragging = true"
+                           @dragleave.prevent="dragging = false"
+                           @drop.prevent="dragging = false;
+                                          if ($event.dataTransfer.files.length) {
+                                            $refs.boxImageFiles.files = $event.dataTransfer.files;
+                                            $refs.boxImageFiles.dispatchEvent(new Event('change'));
+                                          }"
+                           :class="dragging ? 'border-orange-500 bg-orange-50/50' : 'border-slate-300 bg-slate-50/50 hover:border-orange-500 hover:bg-orange-50/30'"
+                           class="flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all text-center group">
+                      <div class="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center group-hover:scale-110 transition-transform mb-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                      </div>
+                      <div class="text-sm font-semibold text-slate-700 group-hover:text-orange-700">
+                        {{ t('tracking.detail.box_image_dropzone') }}
+                      </div>
+                      <div class="text-xs text-slate-400 mt-1">
+                        {{ t('tracking.detail.box_image_dropzone_note') }}
+                      </div>
+                      <input type="file" x-ref="boxImageFiles" id="detail-box-image-upload-{{ p.tracking_no }}"
+                             name="files" accept="image/*, .png, .jpg, .jpeg, .bmp, .webp" multiple class="hidden"
+                             onchange="this.form.requestSubmit()">
+                    </label>
+                  </form>
+                </div>
+                {% endif %}
+              </div>
+
+              <div class="border-t border-slate-100 p-4 bg-slate-50/70 flex items-center justify-end">
+                <button type="button" @click="open = false" class="btn btn-ghost">
+                  {{ t('common.close') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
+      {% else %}
+      {# Upload POD & Teslimat Notu Modali (Ekranin tam ortasinda x-teleport ile acilir) #}
+      <section x-data="{ open: false, noteVal: '{{ p.issue_text or '' }}', setPreset(val) { this.noteVal = val; } }">
+        <button type="button" @click="open = true; $nextTick(() => { if (window.htmx) htmx.process(document.body); })"
+                class="btn btn-secondary w-full justify-center text-xs py-2.5 shadow-2xs gap-1.5">
+          <svg class="w-4 h-4 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+          </svg>
+          <span>POD / Not</span>
+          {% if p.pod_path %}
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500" title="POD Mevcut"></span>
+          {% elif p.issue_text %}
+            <span class="inline-block w-2 h-2 rounded-full bg-sky-500" title="Not Kayıtlı"></span>
+          {% endif %}
+        </button>
+
+        <template x-teleport="body">
+          <div x-show="open" x-cloak @keydown.escape.window="open = false"
+               class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs" @click="open = false"></div>
+            <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col">
+              {# Modal Header #}
+              <div class="px-6 py-4 border-b border-slate-100 flex items-start justify-between">
+                <div>
+                  <h3 class="font-semibold text-slate-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    POD Belgesi & Teslimat / PIN Notu
+                  </h3>
+                  <div class="font-mono text-xs text-slate-500 mt-1 flex items-center gap-2">
+                    <span>{{ p.tracking_no }}</span>
+                    {% if p.store_code %}<span>· {{ p.store_code }}</span>{% endif %}
+                    {% if p.invoice_number %}<span>· Fat: {{ p.invoice_number }}</span>{% endif %}
+                  </div>
+                </div>
+                <button type="button" @click="open = false" class="text-slate-400 hover:text-slate-800">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
+
+              {# Modal Body #}
+              <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                {# Mevcut POD Durum Karti #}
+                <div class="p-3.5 rounded-xl border {% if p.pod_path %}border-emerald-200 bg-emerald-50/70 text-emerald-900{% else %}border-slate-200 bg-slate-50/80 text-slate-700{% endif %} flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-2 text-xs font-semibold">
+                    {% if p.pod_path %}
+                      <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold">✓</span>
+                      <span>Resmi POD belgesi sistemde mevcut ve arşivlenmiş.</span>
+                    {% else %}
+                      <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold">!</span>
+                      <span>Resmi POD belgesi henüz yüklenmemiş veya arşivlenmemiş.</span>
+                    {% endif %}
+                  </div>
+                  {% if p.pod_path %}
+                    <a href="/pod/download/{{ p.tracking_no }}" class="btn btn-ghost text-xs text-emerald-800 hover:bg-emerald-100 flex-shrink-0">
+                      ⬇ İndir
+                    </a>
+                  {% endif %}
+                </div>
+
+                {# 1. POD PDF / Resim Yukleme Dropzone #}
+                <div class="space-y-2">
+                  <div class="text-xs font-bold text-slate-800 uppercase tracking-wider">1. POD Belgesi Yükle (PDF veya Resim)</div>
+                  <form hx-post="/pod/upload/{{ p.tracking_no }}"
+                        hx-target="#detail-drawer"
+                        hx-swap="innerHTML"
+                        hx-encoding="multipart/form-data">
+                    <label for="detail-pod-upload-{{ p.tracking_no }}"
+                           x-data="{ dragging: false }"
+                           @dragover.prevent="dragging = true"
+                           @dragenter.prevent="dragging = true"
+                           @dragleave.prevent="dragging = false"
+                           @drop.prevent="dragging = false;
+                                          if ($event.dataTransfer.files.length) {
+                                            $refs.podFile.files = $event.dataTransfer.files;
+                                            $refs.podFile.dispatchEvent(new Event('change'));
+                                          }"
+                           :class="dragging ? 'border-sky-500 bg-sky-50/50' : 'border-slate-300 bg-slate-50/50 hover:border-sky-500 hover:bg-sky-50/30'"
+                           class="flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all text-center group">
+                      <div class="w-10 h-10 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center group-hover:scale-110 transition-transform mb-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                      </div>
+                      <div class="text-sm font-semibold text-slate-700 group-hover:text-sky-700">
+                        GLS'ten Gelen POD Belgesini (PDF veya Resim) Buraya Bırakın veya <span class="text-sky-600 underline">Seçin</span>
+                      </div>
+                      <div class="text-xs text-slate-400 mt-1">
+                        PDF doğrudan arşivlenir; <strong>resim</strong> yüklendiğinde otomatik olarak resmi POD şablonumuza gömülüp PDF olarak kaydedilir.
+                      </div>
+                      <input type="file" x-ref="podFile" id="detail-pod-upload-{{ p.tracking_no }}" name="file" accept=".pdf, image/*, .png, .jpg, .jpeg, .bmp, .webp" class="hidden"
+                             onchange="this.form.requestSubmit()">
+                    </label>
+                  </form>
+                </div>
+
+                {# 2. Teslimat Notu / PIN Kodu Aciklamasi #}
+                <div class="space-y-2.5 pt-4 border-t border-slate-100">
+                  <div class="flex items-center justify-between">
+                    <div class="text-xs font-bold text-slate-800 uppercase tracking-wider">2. Teslimat / PIN Kodu Notu</div>
+                    {% if p.issue_text %}
+                      <span class="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md font-medium">✓ Kayıtlı Not</span>
+                    {% endif %}
+                  </div>
+                  <div class="text-xs text-slate-500">
+                    GLS e-postada PIN kodu ile teslim edildiğini belirttiyse aşağıdaki hazır şablonu seçebilirsiniz:
+                  </div>
+
+                  {# Hazir Sablonlar (Turkce Aciklamali, Ingilizce Standart Metin) #}
+                  <div class="space-y-2">
+                    <button type="button" 
+                            @click="setPreset('cnee collected from PS with pin code, no pod available.')"
+                            class="w-full text-left p-3 bg-slate-50 hover:bg-sky-50/70 border border-slate-200 hover:border-sky-400 rounded-xl text-xs text-slate-800 transition-all font-medium flex items-center justify-between gap-3 group">
+                      <div>
+                        <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>🔑</span>
+                          <span>PIN Kodu ile Teslim (No POD)</span>
+                        </div>
+                        <div class="text-[11px] font-mono text-slate-600 mt-0.5">
+                          cnee collected from PS with pin code, no pod available.
+                        </div>
+                      </div>
+                      <span class="text-xs text-sky-600 font-semibold opacity-0 group-hover:opacity-100 flex-shrink-0">Seç ↵</span>
+                    </button>
+
+                    <button type="button" 
+                            @click="setPreset('Delivered to safe place / porch.')"
+                            class="w-full text-left p-3 bg-slate-50 hover:bg-sky-50/70 border border-slate-200 hover:border-sky-400 rounded-xl text-xs text-slate-800 transition-all font-medium flex items-center justify-between gap-3 group">
+                      <div>
+                        <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>🏠</span>
+                          <span>Güvenli Alana / Kapıya Bırakıldı</span>
+                        </div>
+                        <div class="text-[11px] font-mono text-slate-600 mt-0.5">
+                          Delivered to safe place / porch.
+                        </div>
+                      </div>
+                      <span class="text-xs text-sky-600 font-semibold opacity-0 group-hover:opacity-100 flex-shrink-0">Seç ↵</span>
+                    </button>
+
+                    <button type="button" 
+                            @click="setPreset('Delivered to neighbour / reception.')"
+                            class="w-full text-left p-3 bg-slate-50 hover:bg-sky-50/70 border border-slate-200 hover:border-sky-400 rounded-xl text-xs text-slate-800 transition-all font-medium flex items-center justify-between gap-3 group">
+                      <div>
+                        <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>🏢</span>
+                          <span>Danışma / Komşuya Teslim Edildi</span>
+                        </div>
+                        <div class="text-[11px] font-mono text-slate-600 mt-0.5">
+                          Delivered to neighbour / reception.
+                        </div>
+                      </div>
+                      <span class="text-xs text-sky-600 font-semibold opacity-0 group-hover:opacity-100 flex-shrink-0">Seç ↵</span>
+                    </button>
+
+                    <button type="button" 
+                            @click="setPreset('Delivered without signature / contactless.')"
+                            class="w-full text-left p-3 bg-slate-50 hover:bg-sky-50/70 border border-slate-200 hover:border-sky-400 rounded-xl text-xs text-slate-800 transition-all font-medium flex items-center justify-between gap-3 group">
+                      <div>
+                        <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>✍️</span>
+                          <span>İmzasız / Temassız Teslimat</span>
+                        </div>
+                        <div class="text-[11px] font-mono text-slate-600 mt-0.5">
+                          Delivered without signature / contactless.
+                        </div>
+                      </div>
+                      <span class="text-xs text-sky-600 font-semibold opacity-0 group-hover:opacity-100 flex-shrink-0">Seç ↵</span>
+                    </button>
+                  </div>
+
+                  <form hx-post="/tracking/note/{{ p.tracking_no }}"
+                        hx-target="#detail-drawer"
+                        hx-swap="innerHTML"
+                        @submit="setTimeout(() => { open = false; }, 80)"
+                        class="flex items-center gap-2 pt-1">
+                    <input type="text" name="note" x-model="noteVal"
+                           placeholder="GLS teslimat notu veya PIN kodu açıklaması (İngilizce)..."
+                           class="input text-xs flex-1 bg-white">
+                    <button type="submit" class="btn btn-secondary text-xs px-4 py-2">
+                      Kaydet
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              {# Modal Footer #}
+              <div class="border-t border-slate-100 p-4 bg-slate-50/70 flex items-center justify-end">
+                <button type="button" @click="open = false" class="btn btn-ghost">
+                  {{ t('common.close') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
+      {% endif %}
+    </div>
+
+    <!-- Alici -->
+    <section>
+      <h3 class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">{{ t('field.consignee') }}</h3>
+      <div class="detail-section-card text-sm">
+        <div class="font-medium text-slate-800">{{ p.consignee_name or p.store_code or '—' }}</div>
+        {% if p.store_code %}<div class="text-slate-500 text-xs mt-0.5">{{ t('tracking.detail.store_code') }}: {{ p.store_code }}</div>{% endif %}
+        {% if p.zip_code or p.country %}
+          <div class="text-slate-500 text-xs mt-1">
+            {% if p.zip_code %}{{ p.zip_code }} · {% endif %}{{ p.country }}
+          </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <!-- Fatura -->
+    {% if p.invoice_number or p.emc_invoices %}
+    <section>
+      <h3 class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">{{ t('tracking.detail.invoice') }}</h3>
+      <div class="detail-section-card text-sm space-y-1">
+        {% if p.invoice_number %}<div><span class="text-slate-500 text-xs">{{ t('tracking.detail.invoice_main') }}:</span> <span class="font-mono">{{ p.invoice_number }}</span></div>{% endif %}
+        {% if p.emc_invoices %}<div><span class="text-slate-500 text-xs">{{ t('tracking.detail.invoice_emc') }}:</span> <span class="font-mono text-xs break-all">{{ p.emc_invoices }}</span></div>{% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Sevkiyat -->
+    <section>
+      <h3 class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">{{ t('tracking.detail.shipment') }}</h3>
+      <div class="detail-grid-2 text-sm">
+        <div class="detail-section-card">
+          <div class="text-slate-400 text-xs">{{ t('field.shipment_date') }}</div>
+          <div class="text-slate-800 font-medium mt-0.5">{{ p.shipment_date or '—' }}</div>
+        </div>
+        <div class="detail-section-card">
+          <div class="text-slate-400 text-xs">{{ t('field.delivered_date') }}</div>
+          <div class="{% if p.delivered_date %}text-emerald-700{% else %}text-slate-500{% endif %} font-medium mt-0.5">
+            {{ p.delivered_date|localtime or p.delivered_date or t('tracking.detail.awaiting') }}
+          </div>
+        </div>
+        <div class="detail-section-card">
+          <div class="text-slate-400 text-xs">{{ t('field.sales_rep') }}</div>
+          <div class="text-slate-800 font-medium mt-0.5 text-xs">{{ p.sales_rep or '—' }}</div>
+        </div>
+        <div class="detail-section-card">
+          <div class="text-slate-400 text-xs">{{ t('tracking.detail.method') }}</div>
+          <div class="text-slate-800 font-medium mt-0.5 text-xs">{{ p.shipment_method or '—' }}</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Teslimat Notu Cipi (varsa) -->
+    {% if p.issue_text %}
+    <section>
+      <h3 class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Teslimat / PIN Notu</h3>
+      <div class="bg-sky-50/70 border border-sky-200/70 rounded-xl p-3 text-xs text-sky-900 font-medium">
+        {{ p.issue_text }}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Nakliye maliyeti -->
+    {% if p.weight_kg or p.freight_cost %}
+    <section>
+      <h3 class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">{{ t('tracking.col.carrier') }}</h3>
+      <div class="detail-section-card text-sm">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-slate-500 text-xs">{{ t('field.weight') }}</div>
+            <div class="text-slate-800 font-semibold text-lg">{{ "%.1f"|format(p.weight_kg or 0) }} <span class="text-xs font-normal text-slate-500">kg</span></div>
+          </div>
+          <div class="text-right">
+            <div class="text-slate-500 text-xs">{{ t('tracking.detail.est_cost') }}</div>
+            <div class="text-slate-800 font-semibold text-lg">€{{ "%.2f"|format(p.freight_cost or 0) }}</div>
+          </div>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Statu zaman cizelgesi -->
+    <section>
+      <h3 class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">{{ t('tracking.detail.history') }}</h3>
+      <ol class="relative border-l border-slate-200 ml-3 space-y-4">
+        {% for e in events %}
+        {% set ecolor = status_color(e.status) %}
+        <li class="ml-4" {% if e.count > 1 %}x-data="{ open: false }"{% endif %}>
+          <div class="absolute -left-1.5 w-3 h-3 rounded-full bg-{{ ecolor }}-500 border-2 border-white"></div>
+          <div class="flex items-center gap-1.5 text-xs text-slate-500">
+            <span>
+              {% if e.status == 'delivered' and p.delivered_date %}
+                {{ p.delivered_date|localtime or p.delivered_date }}
+              {% elif e.status == 'created' and p.shipment_date %}
+                {{ p.shipment_date }}
+              {% else %}
+                {{ e.at|localtime }}
+              {% endif %}
+            </span>
+            {% if e.count > 1 %}
+            <button type="button" @click="open = !open"
+                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 text-[10px] font-semibold transition-colors">
+              <span>×{{ e.count }}</span>
+              <svg class="w-2.5 h-2.5 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+            {% endif %}
+          </div>
+          <div class="text-sm font-medium text-slate-800 mt-0.5">{{ status_label(e.status) }}</div>
+          {% if e.note %}
+          <div class="text-xs text-slate-500 mt-1 pl-2 border-l-2 border-slate-200" title="GLS'ten gelen orijinal metin">{{ e.note }}</div>
+          {% endif %}
+          {% if e.count > 1 %}
+          <div x-show="open" x-cloak x-transition.duration.150ms class="mt-1.5 pl-2 space-y-0.5">
+            {% for ts in e.timestamps %}
+            <div class="text-[11px] text-slate-400 font-mono">{{ ts|localtime }}</div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </li>
+        {% endfor %}
+        {% if not events %}
+        <li class="text-sm text-slate-400 italic ml-2">{{ t('tracking.detail.no_events') }}</li>
+        {% endif %}
+      </ol>
+    </section>
+  </div>
+
+  <!-- Alt aksiyon bar -->
+  {# Yetki olcutu `auth/access.py`den: 403 veren kuralla ayni kaynak. #}
+  {% set can_cancel = p.channel == 'NL' and p.status == 'created'
+                      and can(request.state.user.role if request.state.user else '', '/labels') %}
+  <div class="border-t border-slate-100 px-6 py-4 bg-slate-50/70 space-y-3" style="padding: 16px 24px;" x-data="{ confirming: false }">
+    {% if can_cancel %}
+    <!-- Iptal GERI ALINAMAZ; bu yuzden IKI adim: once bu kutu acilir, sonra
+         gonder dugmesi ayrica tarayici onayi sorar (hx-confirm). -->
+    <div x-show="confirming" x-cloak class="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-sm">
+      <div class="font-semibold text-rose-800">{{ t('tracking.cancel.warn_title') }}</div>
+      <p class="text-rose-700 text-xs mt-1">{{ t('tracking.cancel.warn_body') }}</p>
+      <div class="font-mono text-xs text-rose-900 mt-2">
+        {{ p.tracking_no }}{% if p.store_code %} · {{ p.store_code }}{% endif %}
+      </div>
+      <div class="flex items-center gap-2 mt-3">
+        <button class="btn btn-danger"
+                hx-post="/tracking/cancel/{{ p.tracking_no }}"
+                hx-target="#detail-drawer" hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                hx-confirm="{{ t('tracking.cancel.confirm', tracking_no=p.tracking_no) }}">
+          {{ t('tracking.cancel.do') }}
+        </button>
+        <button type="button" class="btn btn-ghost" @click="confirming = false">
+          {{ t('common.cancel') }}
+        </button>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="flex items-center gap-2">
+      {# FedEx'te POD YOK — teslim edilmisse ve koli gorseli yuklenmisse ONA
+         iner, GLS'in POD ucuna hic gidilmez (aksi 400 dondururdu, bkz.
+         web/routers/pod.py:_fetch_pod_bytes). #}
+      {% if p.status == 'delivered' and p.channel == 'FEDEX' and p.box_image_path %}
+      <a href="/tracking/box-image/download/{{ p.tracking_no }}" class="btn btn-accent flex-1">
+        {{ t('tracking.detail.box_image') }} — {{ t('tracking.detail.box_image_download') }}
+      </a>
+      {% elif p.status == 'delivered' and p.channel != 'FEDEX' %}
+      <a href="/pod/download/{{ p.tracking_no }}" class="btn btn-accent flex-1">
+        {{ t('tracking.detail.download_pod') }}
+      </a>
+      {% endif %}
+      {% if can_cancel %}
+      <button type="button" class="btn btn-ghost text-rose-600" x-show="!confirming"
+              @click="confirming = true">
+        {{ t('tracking.cancel.start') }}
+      </button>
+      {% endif %}
+      <button onclick="closeDetail()" class="btn btn-ghost">{{ t('common.close') }}</button>
+    </div>
+  </div>
+</div>

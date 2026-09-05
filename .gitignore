@@ -1,0 +1,21 @@
+# Ortam / sirlar
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+venv/
+.venv/
+
+# Yerel veri / cikti (sunucuda bind-mount, repoya girmemeli)
+data/
+output/
+backups/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/

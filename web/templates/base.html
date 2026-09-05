@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="{{ lang() }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{{ t('app.title') }}{% endblock %}</title>
+  {# Sekme simgesi. Once SVG (her olcude keskin), desteklemeyen icin PNG. #}
+  <link rel="icon" type="image/svg+xml" href="/static/logo-mark.svg">
+  <link rel="icon" type="image/png" sizes="512x512" href="/static/logo-mark.png">
+  <link rel="apple-touch-icon" href="/static/logo-mark.png">
+
+  {# Tum on yuz bagimliliklari YERELDEN sunulur (web/static/vendor). Onceden
+     cdn.tailwindcss.com + unpkg.com'dan cekiliyordu: ic agdaki tarayicilar bu
+     adreslere bazen hic ulasamiyor, bazen saniyelerce bekliyordu. Sonuc:
+     sayfa acilisi donuyor ve htmx yuklenmezse "Etiket Olustur" gibi tamamen
+     htmx'e bagli formlar tiklaninca hicbir sey yapmiyordu (2026-09-03). #}
+  <!-- Tailwind (Play CDN dosyasi, yerel kopya — build step yok) -->
+  <script src="/static/vendor/tailwind-play.js"></script>
+  <!-- HTMX ve SSE eklentisi -->
+  <script src="/static/vendor/htmx.min.js"></script>
+  <script src="/static/vendor/htmx-ext-sse.js"></script>
+  <!-- Alpine.js (kucuk etkilesim icin) -->
+  <script defer src="/static/vendor/alpine.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      /*
+        HTMX ile SONRADAN gelen parcalarin sinifları.
+
+        CDN surumu sayfayi acilista tarar ve YALNIZCA o an sayfada duran
+        siniflar icin kural uretir. Kargo detayi (`_partials/tracking_detail.html`)
+        tiklaninca geliyor; canlida oradaki `p-6`, `rounded-xl`, `grid-cols-2`
+        gibi sinifların hicbiri uretilmiyordu — yan panel dolgusuz, kartlar
+        duz, sevkiyat izgarasi tek sutun goruntuleniyordu. Sayfa acilisinda
+        da kullanilan siniflar (`px-6`, `space-y-6`) calistigi icin ariza
+        "kismen bozuk" gorunuyor ve teshisi zorlastiriyordu.
+
+        Buraya YALNIZCA sonradan gelen parcalarda gecen, sayfa govdesinde
+        bulunmayan siniflar yazilir.
+      */
+      safelist: [
+        'grid', 'grid-cols-2', 'gap-2.5', 'gap-3', 'h-full', 'w-full', 'text-left', 'ml-auto', 'ml-3', 'ml-4',
+        'whitespace-nowrap',
+        'p-6', 'px-6', 'p-3.5', 'py-4', 'py-5', 'mb-2', 'space-y-3', 'space-y-4', 'space-y-5', 'space-y-6',
+        'rounded-xl', 'rounded-2xl', 'max-w-3xl', 'max-h-[85vh]', 'z-50',
+        'bg-slate-50/70', 'bg-slate-500', 'bg-slate-900/40', 'border-2',
+        'border-white', 'hover:text-slate-800', 'transition-colors',
+        'tracking-wider', 'italic', '-left-1.5',
+        'btn-danger', 'bg-rose-50', 'border-rose-200',
+        'text-rose-600', 'text-rose-700', 'text-rose-800', 'text-rose-900',
+      ],
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: {
+            gls: { yellow: '#FFCC00', dark: '#0A1A2A' },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    ::-webkit-scrollbar-track { background: transparent; }
+
+    /* ---------- Design system (plain CSS - Tailwind CDN olmadan @apply yok) ---------- */
+
+    /* ---------- Sol menu cubugu (acilir/kapanir) ----------
+       Genislik TEK bir degiskende: hem cubuk hem icerik ondan besleniyor, ikisi
+       ayrisamaz. Durum <html> uzerindeki sinifta -> <head>'deki satir ici script
+       Alpine yuklenmeden once uygular, acilista genis->dar sicramasi olmaz. */
+    :root { --sb: 15rem; }
+    html.nav-collapsed { --sb: 4.5rem; }
+    @media (max-width: 1024px) { :root { --sb: 4.5rem; } }   /* dar ekranda hep ikon */
+
+    .sidebar { position:fixed; top:0; bottom:0; left:0; width:var(--sb); z-index:30;
+               background:#fff; border-right:1px solid #e5e9f0; display:flex; flex-direction:column;
+               transition:width .16s ease; overflow:hidden; }
+    .app-main { margin-left:var(--sb); transition:margin-left .16s ease; min-width:0; }
+
+    /* Daraldiginda gizlenen her sey (etiketler, kullanici adi, baslikcik) */
+    html.nav-collapsed .sb-label { display:none; }
+    @media (max-width: 1024px) { .sb-label { display:none; } }
+    html.nav-collapsed .nav-item, html.nav-collapsed .sb-row { justify-content:center; }
+    @media (max-width: 1024px) { .nav-item, .sb-row { justify-content:center; } }
+
+    .nav-item { position:relative; display:flex; align-items:center; gap:.65rem; padding:.55rem .7rem; border-radius:.55rem;
+                font-size:.85rem; color:#475569; transition:background .12s, color .12s; white-space:nowrap; }
+    .nav-item:hover { background:#f1f5f9; color:#0f172a; }
+    .nav-item.active { background:#f8fafc; color:#0f172a; font-weight:600; }
+    .nav-item.active::before { content:''; position:absolute; left:0; top:.35rem; bottom:.35rem; width:3px;
+                               border-radius:0 2px 2px 0; background:#FFCC00; }
+    .nav-item svg { color:#94a3b8; flex-shrink:0; }
+    .nav-item:hover svg, .nav-item.active svg { color:#0A1A2A; }
+    .sb-row { display:flex; align-items:center; gap:.65rem; }
+
+    /* Sol filtre paneli (gercek GLS Track&Trace ekranindaki sol panel ile ayni desen).
+       max-height + overflow-y: panel viewport'tan uzun olunca (cok sayida alan)
+       kendi icinde kaydirilsin diye - sticky elemanlarin kendi ic scrolu olmaz. */
+    .filter-panel-wrap { position:sticky; top:4.75rem; max-height:calc(100vh - 5.75rem); overflow-y:auto; }
+    .filter-panel { background:#fff; border:1px solid #e5e9f0; border-radius:.9rem; padding:1.1rem; }
+    .filter-panel-title { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;
+                           position:sticky; top:0; background:#fff; padding-bottom:.25rem; z-index:1; }
+    .filter-panel-title h3 { font-size:.8rem; font-weight:700; color:#0f172a; letter-spacing:.02em; }
+    .filter-field { margin-bottom:.9rem; }
+    .filter-field:last-of-type { margin-bottom:0; }
+
+    /* ---------- Kargo detay yan paneli ----------
+       BURADA, base.html'de duruyor — parcanin (`_partials/tracking_detail.html`)
+       icinde DEGIL. Iki gerekce:
+         1. Tailwind CDN yalnizca sayfa acilisinda DOM'da olan siniflar icin
+            kural uretir; detay paneli HTMX ile SONRADAN geliyor (bkz. safelist
+            aciklamasi yukarida). Duz CSS bu tuzaga hic girmez.
+         2. Parcanin icindeki <style> her acilista yeniden DOM'a giriyordu.
+       Ust bilgi ile govde AYNI yatay dolguyu paylasir (24px): kullanici
+       (2026-09-01) "Box Contents butonlarinin hizasina cek" dedi — kutular
+       panelin kenarina yapisiyordu. */
+    .detail-drawer-root { box-sizing:border-box; width:100%; }
+    .detail-drawer-head { padding:20px 24px; box-sizing:border-box; }
+    .detail-drawer-body { padding:20px 24px; display:flex; flex-direction:column; gap:20px;
+                          box-sizing:border-box; }
+    .detail-drawer-body > section { width:100%; margin:0; }
+    .detail-section-card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;
+                           padding:14px; box-sizing:border-box; }
+    .detail-grid-2 { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
+
+    /* Cards */
+    .card { background:#fff; border:1px solid #e5e9f0; border-radius:.9rem; }
+    .card-header { padding:1.1rem 1.4rem; border-bottom:1px solid #eef1f5; }
+    .card-title { font-size:.9rem; font-weight:600; color:#0f172a; }
+    .card-subtitle { font-size:.75rem; color:#94a3b8; margin-top:.15rem; }
+
+    /* Buttons */
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:.45rem; font-weight:600; font-size:.825rem;
+           padding:.55rem 1.05rem; border-radius:.6rem; transition:filter .12s, background .12s, opacity .12s; cursor:pointer;
+           border:1px solid transparent; white-space:nowrap; }
+    .btn:disabled { opacity:.4; cursor:not-allowed; }
+    .btn-primary { background:#0f172a; color:#fff; }
+    .btn-primary:hover:not(:disabled) { background:#1e293b; }
+    .btn-accent { background:#FFCC00; color:#0A1A2A; }
+    .btn-accent:hover:not(:disabled) { filter:brightness(.96); }
+    .btn-secondary { background:#fff; border-color:#e2e8f0; color:#334155; }
+    .btn-secondary:hover:not(:disabled) { background:#f8fafc; border-color:#cbd5e1; }
+    .btn-ghost { background:transparent; color:#64748b; }
+    .btn-ghost:hover:not(:disabled) { background:#f1f5f9; color:#0f172a; }
+    .btn-danger { background:#fff; border-color:#fecdd3; color:#e11d48; }
+    .btn-danger:hover:not(:disabled) { background:#fff1f2; }
+    .btn-sm { padding:.4rem .8rem; font-size:.75rem; }
+
+    /* Forms */
+    .field-label { display:block; font-size:.68rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+                   color:#94a3b8; margin-bottom:.4rem; }
+    .input, select.input, textarea.input {
+      width:100%; border:1px solid #dde3ea; border-radius:.6rem; padding:.55rem .75rem; font-size:.85rem;
+      color:#0f172a; background:#fff; transition:border-color .12s, box-shadow .12s;
+    }
+    .input::placeholder { color:#a3adba; }
+    .input:focus { outline:none; border-color:#FFCC00; box-shadow:0 0 0 3.5px rgba(255,204,0,.22); }
+
+    /* Badges */
+    .badge { display:inline-flex; align-items:center; gap:.3rem; padding:.2rem .6rem; border-radius:9999px;
+             font-size:.68rem; font-weight:600; border:1px solid transparent; line-height:1.4; }
+    .badge-slate  { background:#f1f5f9; color:#475569; border-color:#e2e8f0; }
+    .badge-blue   { background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; }
+    .badge-amber  { background:#fffbeb; color:#b45309; border-color:#fde68a; }
+    .badge-emerald{ background:#ecfdf5; color:#047857; border-color:#a7f3d0; }
+    .badge-rose   { background:#fff1f2; color:#be123c; border-color:#fecdd3; }
+    .badge-orange { background:#fff7ed; color:#c2410c; border-color:#fed7aa; }
+    .badge-dot { width:6px; height:6px; border-radius:9999px; background:currentColor; }
+
+    /* Tables */
+    table.data-table { width:100%; font-size:.83rem; border-collapse:separate; border-spacing:0; }
+    table.data-table thead th { background:#fafbfc; font-size:.65rem; text-transform:uppercase; letter-spacing:.06em;
+                                 color:#94a3b8; font-weight:600; padding:.65rem 1.1rem; border-bottom:1px solid #eef1f5;
+                                 text-align:left; white-space:nowrap;
+                                 /* Sol filtre paneli kaydirirken kaliyordu (.filter-panel-wrap),
+                                    sutun basligindaki huni suzgecleri kayboluyordu — 480 satirlik
+                                    listede filtrelemek icin hep basa donmek gerekiyordu.
+                                    Sticky en yakin KAYDIRMA kutusuna gore calisir: tablo
+                                    sarmalayicisi kendi yuksekligini vermelidir (bkz. .table-scroll). */
+                                 position:sticky; top:0; z-index:10; }
+    /* Tabloyu kendi kaydirma bolgesi yapar — basliklar sabit kalir, sayfa YATAY
+       kaymaz (sarmalayicidan overflow'u kaldirmak butun sayfayi kaydiriyordu). */
+    .table-scroll { overflow:auto; max-height:calc(100vh - 13rem); }
+    /* Excel tarzi sutun basligi suzgeci (bkz. tracking.html). Baslikta secili bir
+       kutu varsa huni mavi yanar — hangi sutunun suzuldugu bir bakista gorulsun. */
+    [x-cloak] { display:none !important; }
+    .th-funnel { color:#cbd5e1; padding:.15rem; border-radius:.25rem; line-height:0; }
+    .th-funnel:hover { color:#475569; background:#eef1f5; }
+    thead th:has(input:checked) .th-funnel { color:#2563eb; }
+    table.data-table tbody td { padding:.65rem 1.1rem; border-bottom:1px solid #f3f5f8; color:#334155; vertical-align:middle; }
+    table.data-table tbody tr { transition:background .1s; }
+    table.data-table tbody tr:hover { background:#fafbfc; }
+    table.data-table tbody tr:last-child td { border-bottom:none; }
+
+    /* Misc */
+    .pulse-dot::before {
+      content:''; display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px;
+      background:currentColor; animation:pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100% {opacity:1} 50% {opacity:.35} }
+    canvas { max-height: 240px; }
+
+    /* ---------- Kargo Detay Paneli (Drawer) ---------- */
+    #detail-panel {
+      width: 100% !important;
+      max-width: 540px !important;
+    }
+    .drawer-body {
+      padding: 1.5rem !important; /* 24px sol ve sag bosluk */
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 1.25rem !important;
+    }
+    .drawer-body > section {
+      width: 100% !important;
+    }
+    .drawer-grid-2 {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: 0.75rem !important;
+    }
+    .detail-card {
+      background-color: #f8fafc !important;
+      border: 1px solid #e2e8f0 !important;
+      border-radius: 0.75rem !important;
+      padding: 0.875rem !important;
+    }
+  </style>
+
+  <!-- Menu durumu: DEFER YOK. Ilk boyamadan once uygulanmali, yoksa her sayfa
+       acilisinda cubuk genis cizilip sonra daraliyor. -->
+  <script>
+    if (localStorage.getItem('sbCollapsed') === '1') document.documentElement.classList.add('nav-collapsed');
+    function toggleSidebar() {
+      var c = document.documentElement.classList.toggle('nav-collapsed');
+      localStorage.setItem('sbCollapsed', c ? '1' : '0');
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen text-[15px]">
+    <!-- Sol menu cubugu: gezinme + kullanici, tek yerde. Genislik --sb degiskeninde. -->
+    <aside class="sidebar">
+      <div class="h-16 flex items-center gap-2.5 px-3 shrink-0 border-b border-slate-100">
+        {# Dolcezza dairesel amblemi. Cizimin kendisi SIYAH ve zemini SEFFAF —
+           menu cubugu beyaz oldugu icin kutu/cerceve gerekmez, eskiden buradaki
+           koyu kare yalnizca "G" harfini tasimak icin vardi. #}
+        <button type="button" onclick="toggleSidebar()" title="{{ t('common.menu_toggle') }}"
+                class="w-9 h-9 flex items-center justify-center shrink-0 rounded-lg hover:bg-slate-100 transition">
+          <img src="/static/logo-mark.svg" alt="Dolcezza" class="w-7 h-7">
+        </button>
+        <span class="sb-label text-[10px] text-slate-400 uppercase tracking-widest truncate">NL &middot; IE</span>
+      </div>
+
+        <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+          {% set nav_items = [
+            ('/', t('nav.dashboard'), 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6'),
+            ('/labels', t('nav.labels'), 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z'),
+            ('/dispatch', t('nav.dispatch'), 'M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2'),
+            ('/tracking', t('nav.tracking'), 'M13 10V3L4 14h7v7l9-11h-7z'),
+            ('/pod', t('nav.pod'), 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'),
+            ('/problems', t('nav.problems'), 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z'),
+            ('/archive', t('nav.archive'), 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4'),
+          ] %}
+          {# Menuyu ROL suzer. Kural `auth/access.py`de, 403 veren yerle AYNI
+             kaynak — menude olmayan bir sayfa URL'den de acilmaz. #}
+          {% set role = request.state.user.role if request.state.user else '' %}
+          {% for path, label, icon in nav_items if can(role, path) %}
+          <a href="{{ path }}" title="{{ label }}"
+             class="nav-item {% if request.url.path == path or (path != '/' and request.url.path.startswith(path)) %}active{% endif %}">
+            <svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon }}"/>
+            </svg>
+            <span class="sb-label">{{ label }}</span>
+          </a>
+          {% endfor %}
+
+          {# Raporlar ARTIK IKI ayri sayfa (kullanici istegi, 2026-08-31):
+             "reports kutusuna bastığında altta parcelshop deliveries ve
+             delivery times adlı iki ayrı alan açıp oradan da seçmesi lazım".
+             Tek bir baglanti yerine acilir/kapanir bir grup — alt sayfalardan
+             birindeyken kendiliginden acik durur (`open` baslangic degeri
+             `request.url.path`e bakar). #}
+          {% if can(role, '/reports') %}
+          {% set reports_open = request.url.path.startswith('/reports') %}
+          <div x-data="{ open: {{ 'true' if reports_open else 'false' }} }">
+            <button type="button" @click="open = !open" title="{{ t('nav.reports') }}"
+                    class="nav-item w-full {% if reports_open %}active{% endif %}">
+              <svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+              </svg>
+              <span class="sb-label flex-1 text-left">{{ t('nav.reports') }}</span>
+              <svg class="sb-label w-3.5 h-3.5 shrink-0 transition-transform" :class="open ? 'rotate-180' : ''"
+                   fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+            <div x-show="open" x-cloak x-transition.duration.150ms class="sb-label pl-8 mt-0.5 space-y-0.5">
+              {% for path, label in [
+                ('/reports/completion', t('nav.reports_completion')),
+                ('/reports/delivery-times', t('nav.reports_delivery_times')),
+                ('/reports/parcel-shop', t('nav.reports_parcel_shop')),
+              ] %}
+              <a href="{{ path }}" title="{{ label }}"
+                 class="nav-item !py-1.5 text-[13px] {% if request.url.path == path %}active{% endif %}">
+                <span class="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span>
+                <span>{{ label }}</span>
+              </a>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {# Adres defteri KALDIRILDI: alici adresleri artik canlida ERP'den
+             (Erp_Address), test/mock'ta yerel defterden gelir (bkz.
+             web/address_source.py). Ayri bir adres sayfasi yok. #}
+          {% if can(role, '/settings') %}
+          <a href="/settings" title="{{ t('nav.settings') }}"
+             class="nav-item {% if request.url.path.startswith('/settings') %}active{% endif %}">
+            <svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <span class="sb-label">{{ t('nav.settings') }}</span>
+          </a>
+          {% endif %}
+        </nav>
+
+      {% if request.state.user %}
+      {# Eski oturum cerezlerinde full_name yok — kullanici adina duseriz. #}
+      {% set display_name = request.state.user.full_name or request.state.user.username %}
+      <div class="shrink-0 border-t border-slate-100 p-2 space-y-1">
+        <a href="/auth/profile" title="{{ request.state.user.username }}" class="nav-item">
+          <span class="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-semibold shrink-0">
+            {{ display_name[0]|upper }}
+          </span>
+          <span class="sb-label leading-tight truncate">
+            {{ display_name }}
+            <span class="block text-[10px] text-slate-400 font-normal -mt-0.5">{{ t_or('role.' ~ request.state.user.role, request.state.user.role) }}</span>
+          </span>
+        </a>
+        <form method="post" action="/auth/logout">
+          <button type="submit" title="{{ t('common.logout') }}" class="nav-item w-full hover:!bg-rose-50 hover:!text-rose-600">
+            <svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            </svg>
+            <span class="sb-label">{{ t('common.logout') }}</span>
+          </button>
+        </form>
+      </div>
+      {% endif %}
+    </aside>
+
+    <!-- Icerik -->
+    <div class="app-main min-h-screen flex flex-col">
+      <header class="bg-white border-b border-slate-200 sticky top-0 z-20 px-6 py-3 flex items-center justify-between gap-4">
+        <h1 class="text-sm font-semibold text-slate-900 tracking-tight truncate">
+          {% block header %}{{ self.title().split('·')[0].strip() }}{% endblock %}
+        </h1>
+        <div class="flex items-center gap-4 shrink-0">
+          <!-- Dil anahtari: secim cerezde, sunucuda degil — ayni panele iki kisi
+               farkli dille bakabilsin. `next` gecerli sayfayi geri getirir. -->
+          <div class="flex rounded-lg border border-slate-200 overflow-hidden" title="{{ t('common.language') }}">
+            {% for code, short in langs %}
+            <a href="/lang/{{ code }}?next={{ request.url.path|urlencode }}"
+               class="px-2 py-0.5 text-[11px] font-semibold
+                      {% if lang() == code %}bg-slate-900 text-white{% else %}text-slate-500 hover:bg-slate-50{% endif %}">
+              {{ short }}
+            </a>
+            {% endfor %}
+          </div>
+          <span class="text-xs text-slate-400">{{ t('app.mode') }}: <span class="font-semibold text-slate-600">{{ mode|default('mock') }}</span></span>
+        </div>
+      </header>
+
+      <!-- Tarama ariza seridi. Panelin acilmasi taramanin calistigi ANLAMINA
+           GELMEZ; tarayici olurse sayfalar eskimis veriyi sessizce gostermeye
+           devam eder. Bu yuzden serit dashboard'da degil, HER sayfada. -->
+      {# WhatsApp oturumu koptuysa: mesajlar SESSIZCE kaybolur, panelde hicbir
+         hata gorunmez. Canli olcum (2026-09-01): oturum uc gun dusuktu ve
+         kimse fark etmedi. YALNIZCA ADMIN gorur (kullanici karari) — cozumu
+         OpenWA'da QR okutmaktir, operatorun elinde degil. #}
+      {% if wa_alarm and request.state.user and request.state.user.role == 'admin' %}
+      <div class="bg-amber-500 text-white px-8 py-2.5 text-sm flex items-start gap-3">
+        <svg class="w-5 h-5 shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+        </svg>
+        <div>
+          <div class="font-semibold">{{ t('alert.whatsapp.banner') }}</div>
+          <div class="text-amber-50 text-xs mt-0.5">
+            {{ t('alert.whatsapp.detail', status=wa_alarm.status) }}
+            {% if wa_alarm.detail %} · <code>{{ wa_alarm.detail }}</code>{% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if tracker_alarm %}
+      <div class="bg-rose-600 text-white px-8 py-2.5 text-sm flex items-start gap-3">
+        <svg class="w-5 h-5 shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+        <div>
+          <div class="font-semibold">{{ t('alert.tracker.banner', hours=tracker_alarm.hours) }}</div>
+          <div class="text-rose-100 text-xs mt-0.5">
+            {{ t('alert.tracker.last_success') }}:
+            <code>{{ tracker_alarm.last_success_at|localtime or '—' }}</code>
+            {% if tracker_alarm.last_error %}
+            · {{ t('alert.tracker.last_error') }}: <code>{{ tracker_alarm.last_error }}</code>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <section class="p-8 flex-1 min-w-0">
+        {% block content %}{% endblock %}
+      </section>
+
+      <footer class="border-t border-slate-200 py-3 px-8 text-xs text-slate-400 flex justify-between">
+        <span>GLS NL + GLS IE</span>
+        <span>{{ now }}</span>
+      </footer>
+    </div>
+</body>
+</html>

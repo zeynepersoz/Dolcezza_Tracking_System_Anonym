@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.pod') }}{% endblock %}
+
+{% block content %}
+<div class="max-w-[1600px] mx-auto flex gap-6 items-start">
+
+  <!-- Sol filtre paneli -->
+  <aside class="w-64 shrink-0 filter-panel-wrap">
+    <form method="get" action="/pod" class="filter-panel">
+      <div class="filter-panel-title">
+        <h3>{{ t('common.filters')|upper }}</h3>
+        {% if active_filter_count %}<span class="badge badge-blue">{{ t('tracking.active_count', count=active_filter_count) }}</span>{% endif %}
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.tracking_no') }}</label>
+        <input type="text" name="f_tracking_no" value="{{ f.tracking_no }}" placeholder="{{ t('tracking.ph.tracking_no') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.reference') }}</label>
+        <input type="text" name="f_reference" value="{{ f.reference }}" placeholder="{{ t('tracking.ph.any') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('tracking.f.store_code') }}</label>
+        <input type="text" name="f_store_code" value="{{ f.store_code }}" placeholder="{{ t('tracking.ph.any') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.invoice_number') }}</label>
+        <input type="text" name="f_invoice_number" value="{{ f.invoice_number }}" placeholder="{{ t('tracking.ph.any') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.emc_invoices') }}</label>
+        <input type="text" name="f_emc_invoices" value="{{ f.emc_invoices }}" placeholder="{{ t('tracking.ph.any') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.consignee') }}</label>
+        <input type="text" name="f_consignee_name" value="{{ f.consignee_name }}" placeholder="{{ t('tracking.ph.consignee') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.zip_code') }}</label>
+        <input type="text" name="f_zip_code" value="{{ f.zip_code }}" placeholder="{{ t('tracking.ph.any') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.country') }}</label>
+        <input type="text" name="f_country" value="{{ f.country }}" placeholder="{{ t('tracking.ph.country') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.sales_rep') }}</label>
+        <input type="text" name="f_sales_rep" value="{{ f.sales_rep }}" placeholder="{{ t('tracking.ph.any') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.shipment_method') }}</label>
+        <input type="text" name="f_shipment_method" value="{{ f.shipment_method }}" placeholder="{{ t('tracking.ph.any') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('field.delivered_date') }}</label>
+        <input type="text" name="f_delivered_date" value="{{ f.delivered_date }}" placeholder="{{ t('tracking.ph.date') }}" class="input">
+      </div>
+      <div class="filter-field">
+        <label class="field-label">{{ t('tracking.f.channel') }}</label>
+        <select name="f_channel" class="input">
+          <option value="">{{ t('tracking.channel_any') }}</option>
+          <option value="NL" {% if f_channel == 'NL' %}selected{% endif %}>{{ t('tracking.channel_nl') }}</option>
+          <option value="IE" {% if f_channel == 'IE' %}selected{% endif %}>{{ t('tracking.channel_ie') }}</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm w-full mt-1">{{ t('common.filter') }}</button>
+      <a href="/pod" class="btn btn-ghost btn-sm w-full mt-2">{{ t('tracking.reset_filters') }}</a>
+    </form>
+  </aside>
+
+  <!-- Sag icerik -->
+  <div class="flex-1 min-w-0">
+  <div class="card overflow-hidden">
+    <div class="card-header">
+      <h2 class="card-title">{{ t('pod.list_title') }}</h2>
+      <p class="card-subtitle">{{ t('pod.list_note') }}</p>
+    </div>
+
+    {% if delivered %}
+    <script type="application/json" id="pod-tracking-nos">{{ tracking_nos_json|safe }}</script>
+    {# ZIP uretimi 50+ POD'da uzun surer ve dosya indirmesi sayfayi degistirmedigi
+       icin panel donmus gibi gorunuyordu; kullanici tekrar tikliyor, sunucuda iki
+       kopya is birden calisiyordu. `busy` butonu kisa sure kilitler. #}
+    <form method="post" action="/pod/download-bulk"
+          @submit="busy = true; setTimeout(() => busy = false, 5000)"
+          x-data="{ checked: [], busy: false, all: JSON.parse(document.getElementById('pod-tracking-nos').textContent) }">
+      <div class="px-6 py-2.5 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        {# `common.selected` iki parcaya bolunuyor: sayiyi Alpine yaziyor. #}
+        <span>{{ t('common.selected', count='<span x-text="checked.length"></span>')|safe }}</span>
+        <button type="submit" :disabled="checked.length === 0 || busy" class="btn btn-accent btn-sm">
+          {{ t('pod.bulk_zip') }}
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" @click="checked = $el.checked ? [...all] : []"></th>
+            <th>{{ t('field.channel') }}</th>
+            <th>{{ t('field.tracking_no') }}</th>
+            <th>{{ t('field.reference') }}</th>
+            <th>{{ t('field.consignee') }}</th>
+            <th>{{ t('pod.col.delivered') }}</th>
+            <th class="text-right">{{ t('field.pod') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in delivered %}
+          <tr>
+            <td>
+              <input type="checkbox" name="tracking_nos" value="{{ p.tracking_no }}" x-model="checked">
+            </td>
+            <td><span class="badge {% if p.channel == 'NL' %}badge-blue{% else %}badge-amber{% endif %}">{{ p.channel }}</span></td>
+            <td class="font-mono text-slate-700">{{ p.tracking_no }}</td>
+            <td>{{ p.reference or '—' }}</td>
+            <td>{{ p.consignee_name or '—' }}</td>
+            <td class="text-xs text-slate-500">{{ p.updated_at|localtime }}</td>
+            <td class="text-right">
+              <div class="inline-flex items-center gap-1.5">
+                {# Bu liste TESLIM EDILMIS parcalari gosterir, belgesi olanlari
+                   degil: 379 teslimatin 16'sinin goruntusu GLS'te hic olusmadi.
+                   Dugmeler duruyor (yeniden denemeye deger) ama satirin belgesiz
+                   oldugu once soylenir — yoksa indirme 404'e gidiyor. #}
+                {% if not p.pod_path and not p.issue_text %}
+                <span class="badge badge-amber" title="{{ t('pod.missing_title') }}">
+                  {{ t('pod.missing') }}
+                </span>
+                {% elif not p.pod_path and p.issue_text %}
+                <span class="badge badge-blue" title="{{ p.issue_text }}">
+                  🔑 {{ p.issue_text|truncate(25) }}
+                </span>
+                {% endif %}
+                <a href="/pod/download/{{ p.tracking_no }}" target="_blank"
+                   title="{{ t('pod.customer_pdf_title') }}"
+                   class="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-emerald-50 text-emerald-700
+                          border border-emerald-200 rounded-lg hover:bg-emerald-100">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                  </svg>
+                  {{ t('pod.customer_pdf') }}
+                </a>
+                <a href="/pod/download/{{ p.tracking_no }}?kind=internal" target="_blank"
+                   title="{{ t('pod.internal_pdf_title') }}"
+                   class="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 bg-slate-50 text-slate-600
+                          border border-slate-200 rounded-lg hover:bg-slate-100">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                  {{ t('pod.internal_pdf') }}
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </form>
+    {% else %}
+    <div class="px-6 py-16 text-center text-slate-400">
+      <svg class="w-12 h-12 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+      <span class="text-sm">{{ t('pod.empty') }}</span>
+    </div>
+    {% endif %}
+  </div>
+  </div>
+</div>
+{% endblock %}

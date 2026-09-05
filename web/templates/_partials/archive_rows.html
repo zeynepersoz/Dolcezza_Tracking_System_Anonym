@@ -1,0 +1,41 @@
+{# Arsiv tablosunun govdesi. Hem ilk yuklemede hem HTMX aramasinda AYNI
+   parca cizilir; iki ayri tablo bakim yuku olurdu. #}
+{% for p in parcels %}
+<tr>
+  <td class="font-mono text-xs text-slate-700">{{ p.tracking_no }}</td>
+  <td class="text-xs">
+    <span class="font-mono font-semibold">{{ p.store_code or '—' }}</span>
+    {% if p.consignee_name %}<div class="text-slate-400">{{ p.consignee_name }}</div>{% endif %}
+  </td>
+  <td class="font-mono text-xs">{{ p.invoice_number or '—' }}</td>
+  <td class="text-xs text-slate-500 whitespace-nowrap">
+    {# Teslim tarihi UTC damgasi -> yerel GUN. Duz `[:10]` kirpmasi gece
+       yarisindan sonraki teslimati bir onceki gunde gosterirdi. #}
+    {{ p.delivered_date|localtime('%d.%m.%Y')
+       or (p.shipment_date or '')[:10] or '—' }}
+  </td>
+  {# Yalnizca BULUNULAN DALIN belgesi cizilir — POD ve etiket ayni klasorde
+     yan yana gorunmemeli. `kind` bos olan tek durum arama sonucudur; orada
+     parcanin sahip oldugu her belge listelenir. #}
+  <td class="text-right whitespace-nowrap">
+    {% if p.pod_path and kind != 'label' %}
+    <a href="/pod/download/{{ p.tracking_no }}" class="btn btn-secondary btn-sm">
+      {{ t('archive.pod') }}
+    </a>
+    {% endif %}
+    {% if p.label_pdf_path and kind != 'pod' %}
+    <a href="/archive/label/{{ p.tracking_no }}" class="btn btn-secondary btn-sm">
+      {{ t('archive.label') }}
+    </a>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+{% if not parcels %}
+<tr><td colspan="5" class="!py-12 text-center text-slate-400">{{ t('archive.empty') }}</td></tr>
+{% endif %}
+{% if truncated %}
+<tr><td colspan="5" class="!py-2 text-center text-xs text-amber-600 bg-amber-50">
+  {{ t('common.truncated', count=parcels|length) }}
+</td></tr>
+{% endif %}

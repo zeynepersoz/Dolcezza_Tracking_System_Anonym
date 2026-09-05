@@ -1,0 +1,54 @@
+{% set r = result %}
+{% set has_err = r.errors|length > 0 %}
+<div class="rounded-xl border {% if r.imported > 0 %}border-emerald-200 bg-emerald-50{% else %}border-rose-200 bg-rose-50{% endif %} p-4 text-sm">
+  <div class="flex items-start gap-3">
+    <div class="mt-0.5">
+      {% if r.imported > 0 %}
+        <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      {% else %}
+        <svg class="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.75-2.97l-7.07-12a2 2 0 00-3.5 0l-7.07 12A2 2 0 004.93 19z"/>
+        </svg>
+      {% endif %}
+    </div>
+    <div class="flex-1 space-y-1">
+      <div class="font-semibold text-slate-800">
+        {% if r.imported > 0 %}
+          {{ t('import.ok', count=r.imported) }}
+        {% else %}
+          {{ t('import.none') }}
+        {% endif %}
+      </div>
+      <div class="text-slate-600">
+        {{ t('import.file') }}: <span class="font-mono text-xs">{{ filename }}</span>
+        {% if sheets|length > 1 %}
+          &middot; Sheet: <span class="font-mono text-xs">{{ used_sheet }}</span>
+        {% endif %}
+      </div>
+      <div class="text-xs text-slate-500">
+        {{ t('import.totals', total=r.total, skipped=r.skipped)|safe }}
+      </div>
+    </div>
+  </div>
+
+  {% if has_err %}
+    <details class="mt-3 text-xs">
+      <summary class="cursor-pointer text-rose-700 font-medium">{{ t('import.errors', count=r.errors|length) }}</summary>
+      <ul class="mt-2 space-y-1 text-rose-800 list-disc list-inside">
+        {% for e in r.errors %}<li>{{ e }}</li>{% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+
+  {% if r.imported > 0 %}
+    <button type="button"
+            class="mt-3 text-xs text-emerald-700 underline"
+            hx-get="/tracking/rows" hx-target="#tracking-tbody" hx-swap="innerHTML"
+            hx-include="[name='search'],[name='status'],[name='channel'],[name^='f_']"
+            onclick="document.getElementById('upload-panel').open = false;">
+      {{ t('import.refresh_table') }}
+    </button>
+  {% endif %}
+</div>

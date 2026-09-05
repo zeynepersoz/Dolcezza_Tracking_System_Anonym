@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}{{ t('inquiry.title') }}{% endblock %}
+
+{% block content %}
+<div class="card" x-data="{ tab: 'preview', copiedRich: false, copiedPlain: false, copiedSub: false }">
+  <div class="card-header flex items-center justify-between gap-4 flex-wrap">
+    <div>
+      <div class="card-title">{{ t('inquiry.title') }}</div>
+      <div class="card-subtitle">{{ t('inquiry.subtitle', count=parcels|length, days=wait_days) }}</div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <a class="btn btn-ghost text-xs" href="/problems?kind=pod_missing&stale_days={{ stale_days }}">
+        {{ t('inquiry.back') }}
+      </a>
+      {% if parcels %}
+      <button class="btn btn-secondary text-xs" type="button" @click="copyPlainText()">
+        <span x-text="copiedPlain ? '{{ t('inquiry.copied') }}' : '{{ t('inquiry.copy_plain') }}'"></span>
+      </button>
+      <button class="btn btn-primary text-xs shadow-sm" type="button" @click="copyRichText()">
+        <span x-text="copiedRich ? '{{ t('inquiry.copied') }}' : '{{ t('inquiry.copy_rich') }}'"></span>
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="p-5 space-y-4">
+    {% if parcels %}
+    {# Konu Satırı #}
+    <div>
+      <div class="flex items-center justify-between mb-1">
+        <label class="field-label !mb-0 font-semibold text-slate-700" for="subject">{{ t('inquiry.subject') }}</label>
+        <button type="button" class="text-xs text-sky-600 hover:text-sky-800 hover:underline font-medium"
+                @click="navigator.clipboard.writeText('{{ subject }}'); copiedSub = true; setTimeout(() => copiedSub = false, 2000)">
+          <span x-text="copiedSub ? '{{ t('inquiry.copied') }}' : '{{ t('inquiry.copy_subject') }}'"></span>
+        </button>
+      </div>
+      <div class="relative">
+        <input class="input font-mono text-xs w-full bg-slate-50 border-slate-300 font-medium text-slate-800"
+               id="subject" readonly value="{{ subject }}">
+      </div>
+    </div>
+
+    {# Görünüm Sekmeleri #}
+    <div class="border-b border-slate-200 flex items-center gap-4 text-xs font-semibold">
+      <button type="button" class="pb-2.5 transition-colors border-b-2"
+              :class="tab === 'preview' ? 'border-sky-600 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-700'"
+              @click="tab = 'preview'">
+        {{ t('inquiry.tab_preview') }}
+      </button>
+      <button type="button" class="pb-2.5 transition-colors border-b-2"
+              :class="tab === 'plain' ? 'border-sky-600 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-700'"
+              @click="tab = 'plain'">
+        {{ t('inquiry.tab_plain') }}
+      </button>
+    </div>
+
+    {# 1. Tab: Zengin Görsel Önizleme #}
+    <div x-show="tab === 'preview'" class="bg-white border border-slate-200 rounded-xl p-6 shadow-2xs">
+      <div id="rich-email-content" class="prose max-w-none text-slate-800">
+        {{ html_body|safe }}
+      </div>
+    </div>
+
+    {# 2. Tab: Düz Metin (Textarea) #}
+    <div x-show="tab === 'plain'">
+      <textarea class="input font-mono text-xs w-full bg-slate-50 leading-relaxed" id="draft" x-ref="draft" rows="20"
+                readonly>{{ body }}</textarea>
+    </div>
+
+    <div class="p-3 bg-slate-50 rounded-lg border border-slate-200/80 text-xs text-slate-500">
+      {{ t('inquiry.note')|safe }}
+    </div>
+
+    {% else %}
+    <p class="!py-12 text-center text-slate-400">{{ t('inquiry.empty', days=wait_days) }}</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  function copyRichText() {
+    const richEl = document.getElementById('rich-email-content');
+    const plainText = document.getElementById('draft')?.value || '';
+    if (!richEl) return;
+
+    const htmlBlob = new Blob([richEl.innerHTML], { type: 'text/html' });
+    const textBlob = new Blob([plainText], { type: 'text/plain' });
+
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({
+        'text/html': htmlBlob,
+        'text/plain': textBlob
+      });
+      navigator.clipboard.write([item]).then(() => {
+        const alpine = Alpine.$data(document.querySelector('[x-data]'));
+        if (alpine) {
+          alpine.copiedRich = true;
+          setTimeout(() => alpine.copiedRich = false, 2500);
+        }
+      }).catch(err => {
+        console.warn('Clipboard write failed, falling back to execCommand:', err);
+        fallbackCopyHtml(richEl);
+      });
+    } else {
+      fallbackCopyHtml(richEl);
+    }
+  }
+
+  function fallbackCopyHtml(element) {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    try {
+      document.execCommand('copy');
+      const alpine = Alpine.$data(document.querySelector('[x-data]'));
+      if (alpine) {
+        alpine.copiedRich = true;
+        setTimeout(() => alpine.copiedRich = false, 2500);
+      }
+    } catch (e) {
+      alert('Kopyalama başarısız oldu.');
+    }
+    sel.removeAllRanges();
+  }
+
+  function copyPlainText() {
+    const draft = document.getElementById('draft');
+    if (!draft) return;
+    navigator.clipboard.writeText(draft.value).then(() => {
+      const alpine = Alpine.$data(document.querySelector('[x-data]'));
+      if (alpine) {
+        alpine.copiedPlain = true;
+        setTimeout(() => alpine.copiedPlain = false, 2000);
+      }
+    });
+  }
+</script>
+{% endblock %}

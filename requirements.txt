@@ -1,0 +1,31 @@
+pandas==3.0.5
+openpyxl==3.1.5
+requests==2.34.2
+fastapi==0.141.1
+uvicorn==0.52.4
+pytest==9.1.1
+jinja2==3.1.6           # HTML sablonlari + e-posta sablonlari
+# --- Web Kontrol Merkezi (Faz 2) ---
+apscheduler==3.11.3     # arka plan otomatik takip taraması
+python-multipart==0.0.32 # form upload (etiket + POD)
+sse-starlette==3.4.8    # canlı statu akısı (SSE)
+# --- Kimlik Dogrulama (Faz 3) ---
+itsdangerous==2.2.0     # imzali (HMAC) oturum cookie'si
+# --- GLS gercek API'leri (Faz 4) ---
+pillow==12.3.0          # GLS NL'in PNG olarak yolladigi POD'u arsivde PDF'e cevirmek icin
+httpx==0.28.1           # fastapi.testclient (pytest) icin
+pypdf==6.16.1           # uretilen POD belgesini testte dogrulamak icin
+# --- POD belgesi (Faz 6) ---
+fpdf2==2.8.8            # POD goruntusunu insan-okur teslimat belgesine sarmak icin.
+                        # Turkce karakterler icin Dockerfile'daki fonts-dejavu-core sart:
+                        # fpdf2'nin gomulu fontlari yalnizca Latin-1'dir.
+# --- ERP (MSSQL) takip kaynagi (Faz 7) ---
+pymssql==2.3.13         # Sentez/MSSQL'inden takip numaralarini SALT OKUMA.
+                        # ODBC surucusu gerektirmez; cp312 manylinux tekerlegi hazir
+                        # geldigi icin python:3.12-slim imajinda FreeTDS derlemesi yok.
+
+# Surumler bilerek SABIT (== , >= degil): `docker compose build` her
+# calistiginda farkli bir surum cekmesin — reprodubl olmayan build'ler bir
+# gun aciklamasi zor bir hata olarak geri doner. Guncelleme istendiginde
+# `pip install -U <paket>` + testler + bu dosyanin elle guncellenmesi ile
+# yapilir, otomatik degil.

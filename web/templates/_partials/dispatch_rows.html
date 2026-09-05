@@ -1,0 +1,375 @@
+{# Onizleme tablosu. Uc bolum: gonderilebilir / eksik bilgi / kapsam disi.
+   Operatorun onayi olmadan HICBIR etiket uretilmez — bu parca yalnizca gosterir. #}
+{% set split_list = split.split(',') | select | list %}
+
+{# Satirin aranabilir metni: magaza kodu + unvan + ulke + adres. Kullanici
+   istegi (2026-09-01): "bir de search butonu istiyorum" — 30+ magazalik bir
+   gunde test edilecek bes magazayi elle aramak zordu. Suzme TARAYICIDA olur:
+   liste zaten yuklu, sunucuya gitmek gereksiz gecikme olurdu. #}
+{% macro search_key(s) %}{{ [s.store_code, s.customer_name, s.country,
+    s.address.city if s.address else '', s.address.postal_code if s.address else '']
+    | select | join(' ') | lower }}{% endmacro %}
+
+{% macro store_head(s) %}
+  <div class="flex items-baseline gap-2 flex-wrap">
+    <span class="font-mono font-semibold text-slate-800">{{ s.store_code }}</span>
+    <span class="text-sm text-slate-600">{{ s.customer_name }}</span>
+    {% if s.country %}<span class="badge badge-slate">{{ s.country }}</span>{% endif %}
+  </div>
+  <div class="text-xs text-slate-500 mt-0.5">
+    {{ t('dispatch.boxes', count=s.box_count) }} &middot; {{ s.total_weight }} kg
+    &middot; {{ t('field.reference') }}: <span class="font-mono">{{ s.reference }}</span>
+  </div>
+{% endmacro %}
+
+{# Siparis (fatura) bazinda kirilim: 30 kolilik gonderide operator hangi fatura
+   kac koli/kg gorup, birlestirmeyi/ayirmayi bilerek secsin. Eksik agirlik kirmizi. #}
+{% macro invoice_detail(s) %}
+  <div class="rounded-lg bg-slate-50 border border-slate-100 p-2">
+    <table class="w-full text-xs">
+      <tbody class="divide-y divide-slate-100">
+        {% for line in s.invoice_lines %}
+        <tr>
+          <td class="py-1 pr-3 font-mono text-slate-700">{{ line.invoice or '—' }}</td>
+          <td class="py-1 pr-3 text-slate-500">{{ t('dispatch.boxes', count=line.box_count) }}</td>
+          <td class="py-1 text-right whitespace-nowrap">
+            {% if line.missing_weight %}
+              <span class="text-rose-600 font-semibold">{{ t('dispatch.detail_missing_weight') }}</span>
+            {% else %}
+              <span class="text-slate-600">{{ line.total_weight }} kg</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endmacro %}
+
+{% if not plan.shipments and not plan.skipped %}
+  <div class="card p-8 text-center text-slate-500">{{ t('dispatch.empty') }}</div>
+{% endif %}
+
+{# ---------- gonderilebilir ---------- #}
+{% if plan.sendable %}
+{# Kullanici karari: "hepsi ekrana geldiginde aralarindan sectigi gonderileri de
+   olusturabilmeliler, hepsine zorlanmamali." Kutular varsayilan SECILI gelir
+   (bugunku davranis korunur) ama basliktaki [Tumunu sec/temizle] ve canli sayac
+   ile operator alt kume secip yalnizca onlari gonderebilir. `/create` zaten
+   yalnizca isaretli magazalari aliyor. #}
+<form class="card" hx-post="/dispatch/create" hx-target="#dispatch-body" hx-swap="innerHTML"
+      hx-disabled-elt="find button[type='submit']"
+      hx-confirm="{{ t('dispatch.create_confirm', count=plan.sendable|length) }}"
+      {# `stores`/`selected` BENZERSIZ magaza koduyla tutulur: ayni magaza faturaya
+         gore ayrildiginda (split) sendable listesinde ayni kod birden cok satirda
+         cikar. Kod tekrarli kalirsa hem baslik "tumu secili" sayacini bozuyordu
+         hem de ayni value'lu iki kutu birbirini kilitliyordu. Sunucu (/create)
+         zaten magaza koduyla cozdugu icin secim de magaza kodu eksenindedir. #}
+      {# BILEREK TEK TIRNAK: `tojson` ciktisi kendi CIFT tirnaklarini (JSON
+         metin degerleri) KACIRMAZ — Markup/safe isaretli oldugu icin normal
+         autoescape'ten gecmez. Cift tirnakli bir attribute icine konursa
+         (`x-data="..."`) ilk `"TrackingNo"` tirnaginda attribute ERKEN
+         KAPANIR, Alpine bos `{}` data ile kalir (canli olcum, 2026-08-31:
+         "Select all" hicbir sey yapmiyordu, "Etiket olustur" hep pasif
+         kaliyordu — DevTools'ta `Alpine.$data(form)` gercekten `{}` cikti).
+         Tek tirnakli attribute'te `tojson` TEK tirnagi `'` diye kacirir,
+         bu yuzden guvenli (bkz. settings/users.html'deki ayni desen). #}
+      {# `edits`: magaza kodu -> onizlemede duzenlenebilen adres alanlari. Her
+         sendable adres icin MEVCUT degerle on-yuklenir; alttaki alanlar
+         `x-model` ile buna baglidir. "Etiket olustur"da `overrides` gizli
+         alani bunu JSON olarak yollar -> /dispatch/create adresi buna gore
+         eziyor (kullanici 2026-09-03: "duzenleme etiket olustur butonunda
+         aktive olacak"). `tojson` tek tirnagi kacirdigi icin tek tirnakli
+         x-data icinde guvenli. #}
+      {# `edits` anahtari SEVKIYAT bazinda: magaza kodu + "::" + referans (fatura
+         kumesi). Bir magaza faturaya gore AYRILINCA ("Ayir") her fatura kendi
+         sevkiyati ve kendi BAGIMSIZ adres formu olur — birinin adresi farkliysa
+         yalnizca onu duzeltip basarsin, digerleri etkilenmez (kullanici
+         2026-09-03). Ayrilmamis magazada tek anahtar olur. #}
+      x-data='{
+        stores: {{ plan.sendable | map(attribute="store_code") | unique | list | tojson }},
+        selected: {{ plan.sendable | map(attribute="store_code") | unique | list | tojson }},
+        edits: {
+          {%- for s in plan.sendable if s.address %}
+          {{ (s.store_code ~ "::" ~ s.reference) | tojson }}: {
+            name: {{ (s.address.name or "") | tojson }},
+            contact: {{ (s.address.contact or "") | tojson }},
+            street: {{ (s.address.street or "") | tojson }},
+            house_number: {{ (s.address.house_number or "") | tojson }},
+            postal_code: {{ (s.address.postal_code or "") | tojson }},
+            city: {{ (s.address.city or "") | tojson }},
+            country: {{ (s.address.country or "") | tojson }},
+            phone: {{ (s.address.phone or "") | tojson }},
+            email: {{ (s.address.email or "") | tojson }}
+          },
+          {%- endfor %}
+        },
+        get allChecked() { return this.stores.length && this.selected.length === this.stores.length; },
+        toggleAll(v) { this.selected = v ? [...this.stores] : []; },
+        q: "",
+        hit(el) { return !this.q || (el.dataset.search || "").includes(this.q.trim().toLowerCase()); }
+      }'>
+  <input type="hidden" name="day" value="{{ day }}">
+  <input type="hidden" name="split" value="{{ split }}">
+  <input type="hidden" name="overrides" :value="JSON.stringify(edits)">
+
+  <div class="card-header flex items-center justify-between">
+    <div class="card-title text-emerald-700">
+      {{ t('dispatch.ready_title', count=plan.sendable|length) }}
+    </div>
+    <div class="flex items-center gap-4 flex-wrap">
+      {# Arama YALNIZCA gorunumu suzer; secim bozulmaz — suzgecle gizlenen bir
+         magaza secili kalir ve etikete girer. Bu yuzden sayac hep TUM secimi
+         gosterir. #}
+      <div class="relative">
+        <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/>
+        </svg>
+        <input type="search" x-model="q" placeholder="{{ t('dispatch.search_ph') }}"
+               class="input !py-1.5 pl-8 pr-7 text-sm w-56">
+        <button type="button" x-show="q" x-cloak @click="q = ''"
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                aria-label="{{ t('common.clear') }}">&times;</button>
+      </div>
+      <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+        <input type="checkbox" class="rounded border-slate-300"
+               :checked="allChecked" @change="toggleAll($event.target.checked)">
+        {{ t('dispatch.select_all') }}
+        <span class="font-mono text-xs text-slate-400"
+              x-text="selected.length + '/' + stores.length"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="divide-y divide-slate-100">
+    {% for s in plan.sendable %}
+    {# Secim (checkbox) ile adres duzenleme AYRI: satira tiklamak secer, [Adresi
+       Duzenle] ise ic formu acar. Buton `<label>` disinda ki tiklayinca kutu
+       toggle olmasin. #}
+    <div class="p-3 hover:bg-slate-50" x-data="{ edit: false, detail: false }"
+         data-search="{{ search_key(s) }}" x-show="hit($el)">
+      <div class="flex items-start gap-3">
+        <label class="flex items-start gap-3 flex-1 min-w-0 cursor-pointer">
+          <input type="checkbox" name="stores" value="{{ s.store_code }}"
+                 x-model="selected" class="mt-1 rounded border-slate-300">
+          <div class="flex-1 min-w-0">
+            {{ store_head(s) }}
+            {% if s.address %}
+            <div class="text-xs text-slate-500 mt-0.5 truncate">
+              {{ [s.address.street, s.address.house_number, s.address.postal_code,
+                  s.address.city, s.address.country] | select | join(' · ') }}
+            </div>
+            {% endif %}
+            {% if s.merged %}
+              {# Kullanicinin "sistem sorsun" kurali: birlestirme varsayilan ACIK,
+                 operator gorup [Ayir] ile bozabilir. #}
+              <div class="mt-1 flex items-center gap-2 flex-wrap">
+                <span class="badge badge-amber">
+                  {{ t('dispatch.merged_note', count=s.invoices|length) }}
+                </span>
+                <button type="button" class="btn btn-secondary btn-sm"
+                        hx-get="/dispatch/rows?day={{ day }}&split={{ (split_list + [s.store_code]) | join(',') | urlencode }}"
+                        hx-target="#dispatch-body" hx-swap="innerHTML">
+                  {{ t('dispatch.split') }}
+                </button>
+              </div>
+            {% elif s.store_code in split_list %}
+              <div class="mt-1">
+                <button type="button" class="btn btn-secondary btn-sm"
+                        hx-get="/dispatch/rows?day={{ day }}&split={{ (split_list | reject('equalto', s.store_code) | list) | join(',') | urlencode }}"
+                        hx-target="#dispatch-body" hx-swap="innerHTML">
+                  {{ t('dispatch.unsplit') }}
+                </button>
+              </div>
+            {% endif %}
+          </div>
+        </label>
+        <div class="flex flex-col items-end gap-1 shrink-0">
+          <button type="button" class="btn btn-secondary btn-sm" @click="detail = !detail">
+            {{ t('dispatch.detail') }}
+          </button>
+          {% if s.address %}
+          <button type="button" class="btn btn-secondary btn-sm" @click="edit = !edit">
+            {{ t('dispatch.edit_address') }}
+          </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <div x-show="detail" x-cloak class="mt-2 ml-7">
+        {{ invoice_detail(s) }}
+      </div>
+
+      {% if s.address %}
+      {# Alanlar `x-model` ile disstaki formun `edits[<kod>]` nesnesine baglidir.
+         "Etiket olustur"da gizli `overrides` alani bunu JSON olarak yollar ve
+         /dispatch/create adresi buna gore eziyor — "Adresi kaydet"e basmadan
+         da bu tur icin gecerli (kullanici 2026-09-03). "Adresi kaydet" ayrica
+         durur: KALICI degisiklik (sonraki gunler) icin defter'e yazar.
+
+         BILEREK <form> DEGIL <div>: bu satir zaten "gonderilebilir" listesinin
+         DIS <form hx-post="/dispatch/create">u icinde duruyor — ic ice iki
+         <form> HTML'de GECERSIZ, tarayici digini erken kapatip alttaki
+         "Etiket olustur" dugmesini formun DISINA dusurebiliyordu (canli
+         olcum, 2026-08-31). "Adresi kaydet" degerlerini hx-include ile bu
+         div'den toplar. #}
+      {# id SEVKIYAT bazinda benzersiz: ayni magaza faturaya gore ayrilinca
+         birden cok edit formu olur, `store_code` tek basina cakisirdi. #}
+      <div x-show="edit" x-cloak id="addr-edit-{{ s.store_code }}-{{ loop.index }}"
+           class="mt-3 p-3 bg-slate-50 rounded-lg">
+        <input type="hidden" name="day" value="{{ day }}">
+        <input type="hidden" name="split" value="{{ split }}">
+        <input type="hidden" name="store_code" value="{{ s.store_code }}">
+        <input type="hidden" name="address_id" value="{{ s.address.id }}">
+        <div class="text-xs font-semibold text-slate-600 mb-2">
+          {{ t('dispatch.address_title', store=s.store_code) }}
+          {% if s.store_code in split_list %}
+          <span class="font-mono text-slate-400">· {{ s.reference }}</span>
+          {% endif %}
+        </div>
+        {% set e = "edits['" ~ s.store_code ~ "::" ~ s.reference ~ "']" %}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <input required name="name" x-model="{{ e }}.name" value="{{ s.address.name }}"
+                 placeholder="{{ t('addr.ph.name') }}" class="sm:col-span-2 input">
+          <input name="contact" x-model="{{ e }}.contact" value="{{ s.address.contact }}"
+                 placeholder="{{ t('addr.ph.contact') }}" class="input">
+          <input name="street" x-model="{{ e }}.street" value="{{ s.address.street }}"
+                 placeholder="{{ t('addr.ph.street') }}" class="sm:col-span-2 input">
+          <input name="house_number" x-model="{{ e }}.house_number" value="{{ s.address.house_number }}"
+                 placeholder="{{ t('addr.ph.house_number') }}" class="input">
+          <input name="postal_code" x-model="{{ e }}.postal_code" value="{{ s.address.postal_code }}"
+                 placeholder="{{ t('addr.ph.postal_code') }}" class="input">
+          <input name="city" x-model="{{ e }}.city" value="{{ s.address.city }}"
+                 placeholder="{{ t('addr.ph.city') }}" class="input">
+          <input name="country" x-model="{{ e }}.country" value="{{ s.address.country }}" maxlength="3"
+                 placeholder="{{ t('addr.ph.country') }}" class="input">
+          <input name="phone" x-model="{{ e }}.phone" value="{{ s.address.phone }}"
+                 placeholder="{{ t('addr.ph.phone') }}" class="input">
+          <input name="email" type="email" x-model="{{ e }}.email" value="{{ s.address.email }}"
+                 placeholder="{{ t('addr.ph.email') }}" class="sm:col-span-2 input">
+        </div>
+        <button type="button" class="btn btn-primary btn-sm mt-2"
+                hx-post="/dispatch/address" hx-target="#dispatch-body" hx-swap="innerHTML"
+                hx-include="#addr-edit-{{ s.store_code }}-{{ loop.index }} input">
+          {{ t('dispatch.address_save') }}
+        </button>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {# Suzgec hicbir seyi tutmazsa liste bombos gorunur ve kullanici "veri mi
+       yok, aramam mi tutmadi" diye ayirt edemez. #}
+    <div x-show="q && !$root.querySelectorAll('[data-search]').length ? false :
+                 q && ![...$root.querySelectorAll('[data-search]')].some(el => hit(el))"
+         x-cloak class="p-6 text-center text-sm text-slate-400">
+      {{ t('dispatch.search_empty') }}
+    </div>
+  </div>
+
+  <div class="p-4 border-t border-slate-100">
+    <button type="submit" class="btn btn-primary"
+            :disabled="!selected.length" :class="!selected.length && 'opacity-50 cursor-not-allowed'">
+      {{ t('dispatch.create_btn', count=plan.sendable|length) }}
+      <span x-show="selected.length < stores.length" x-cloak
+            x-text="'(' + selected.length + ')'"></span>
+    </button>
+  </div>
+</form>
+{% endif %}
+
+{# ---------- eksik bilgi ---------- #}
+{% if plan.blocked %}
+<div class="card mt-4">
+  <div class="card-header">
+    <div class="card-title text-rose-700">
+      {{ t('dispatch.blocked_title', count=plan.blocked|length) }}
+    </div>
+  </div>
+  <div class="divide-y divide-slate-100">
+    {% for s in plan.blocked %}
+    <div class="p-3" x-data="{ open: false, detail: false }">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex-1 min-w-0">
+          {{ store_head(s) }}
+          <div class="text-xs text-rose-600 mt-1">
+            {% if s.state == 'ambiguous_address' %}
+              {{ t('dispatch.help.ambiguous_address', count=s.candidates|length) }}
+            {% else %}
+              {{ t('dispatch.help.' + s.state) }}
+            {% endif %}
+          </div>
+        </div>
+        <div class="flex flex-col items-end gap-1">
+          <span class="badge badge-rose">{{ t('dispatch.state.' + s.state) }}</span>
+          <button type="button" class="btn btn-secondary btn-sm" @click="detail = !detail">
+            {{ t('dispatch.detail') }}
+          </button>
+          {% if s.state in ('no_address', 'ambiguous_address') %}
+            <button type="button" class="btn btn-secondary btn-sm" @click="open = !open">
+              {% if s.state == 'no_address' %}{{ t('dispatch.enter_address') }}
+              {% else %}{{ t('dispatch.fix_address') }}{% endif %}
+            </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <div x-show="detail" x-cloak class="mt-2">
+        {{ invoice_detail(s) }}
+      </div>
+
+      {% if s.state in ('no_address', 'ambiguous_address') %}
+      {# Girilen adres defterie yazilir: BIR KEZ girilir, sonraki gunler eslesir. #}
+      <form x-show="open" x-cloak class="mt-3 p-3 bg-slate-50 rounded-lg"
+            hx-post="/dispatch/address" hx-target="#dispatch-body" hx-swap="innerHTML">
+        <input type="hidden" name="day" value="{{ day }}">
+        <input type="hidden" name="split" value="{{ split }}">
+        <input type="hidden" name="store_code" value="{{ s.store_code }}">
+        <div class="text-xs font-semibold text-slate-600 mb-2">
+          {{ t('dispatch.address_title', store=s.store_code) }}
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <input required name="name" value="{{ s.customer_name }}"
+                 placeholder="{{ t('addr.ph.name') }}" class="sm:col-span-2 input">
+          <input name="contact" placeholder="{{ t('addr.ph.contact') }}" class="input">
+          <input name="street" placeholder="{{ t('addr.ph.street') }}" class="sm:col-span-2 input">
+          <input name="house_number" placeholder="{{ t('addr.ph.house_number') }}" class="input">
+          <input name="postal_code" placeholder="{{ t('addr.ph.postal_code') }}" class="input">
+          <input name="city" placeholder="{{ t('addr.ph.city') }}" class="input">
+          <input name="country" value="{{ s.country }}" maxlength="3"
+                 placeholder="{{ t('addr.ph.country') }}" class="input">
+          <input name="phone" placeholder="{{ t('addr.ph.phone') }}" class="input">
+          <input name="email" type="email" placeholder="{{ t('addr.ph.email') }}"
+                 class="sm:col-span-2 input">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm mt-2">
+          {{ t('dispatch.address_save') }}
+        </button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ---------- kapsam disi ---------- #}
+{% if plan.skipped %}
+<div class="card mt-4">
+  <div class="card-header">
+    <div class="card-title text-slate-500">
+      {{ t('dispatch.skipped_title', count=plan.skipped|length) }}
+    </div>
+  </div>
+  <div class="p-3 space-y-1">
+    {% for s in plan.skipped %}
+    <div class="flex items-center gap-2 text-sm text-slate-500">
+      <span class="font-mono">{{ s.store_code }}</span>
+      <span class="text-xs">{{ t('dispatch.boxes', count=s.box_count) }}</span>
+      <span class="text-xs">&middot; {{ t('dispatch.reason.' + s.reason) }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}

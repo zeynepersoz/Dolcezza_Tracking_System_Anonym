@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.dispatch') }}{% endblock %}
+
+{% block content %}
+{# Tarih secici ustte sabit kalir; onizleme ve ilerleme HTMX ile #dispatch-body'ye
+   biner. Onizleme adimi ZORUNLU: etiket geri alinamaz, 30 sevkiyatlik bir hatanin
+   bedeli 30 yanlis etikettir. #}
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">{{ t('dispatch.title') }}</div>
+      <p class="text-sm text-slate-500 mt-1">{{ t('dispatch.note') }}</p>
+    </div>
+  </div>
+
+  <div class="p-4">
+    {% if dates %}
+      <form class="flex flex-wrap items-end gap-3"
+            hx-get="/dispatch/rows" hx-target="#dispatch-body" hx-swap="innerHTML"
+            hx-indicator="#dispatch-loading">
+        <div>
+          <label class="field-label" for="day">{{ t('dispatch.date_label') }}</label>
+          <select id="day" name="day" class="input min-w-[22rem]">
+            {% for d in dates %}
+              <option value="{{ d.date }}" {% if d.date == day %}selected{% endif %}>
+                {{ t('dispatch.date_option', date=d.date, boxes=d.boxes, stores=d.stores) }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary">{{ t('dispatch.prepare') }}</button>
+        <span id="dispatch-loading" class="htmx-indicator text-sm text-slate-500">
+          {{ t('dispatch.loading') }}
+        </span>
+      </form>
+    {% else %}
+      <form class="flex flex-wrap items-end gap-3"
+            hx-get="/dispatch/rows" hx-target="#dispatch-body" hx-swap="innerHTML"
+            hx-indicator="#dispatch-loading">
+        <div>
+          <label class="field-label" for="day">{{ t('dispatch.date_label') }}</label>
+          <input type="date" id="day" name="day" value="{{ day }}" required
+                 class="input min-w-[12rem]">
+        </div>
+        <button type="submit" class="btn btn-primary">{{ t('dispatch.prepare') }}</button>
+        <span id="dispatch-loading" class="htmx-indicator text-sm text-slate-500">
+          {{ t('dispatch.loading') }}
+        </span>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+<div id="dispatch-body" class="mt-4"></div>
+{% endblock %}

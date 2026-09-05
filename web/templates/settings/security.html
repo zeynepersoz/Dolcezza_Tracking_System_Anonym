@@ -1,0 +1,190 @@
+{% extends "settings_base.html" %}
+
+{% block section %}
+<div class="space-y-6">
+
+  <!-- Engelli IP'ler -->
+  <div class="card overflow-hidden" x-data="{ showForm: false }">
+    <div class="card-header flex items-center justify-between">
+      <div>
+        <h2 class="card-title">{{ t('security.blocked.title') }}</h2>
+        <p class="card-subtitle">{{ t('security.blocked.note') }}</p>
+      </div>
+      <button @click="showForm = !showForm" class="btn btn-accent">{{ t('security.block_new') }}</button>
+    </div>
+
+    <div x-show="showForm" x-transition class="border-b border-slate-100 bg-slate-50/70 p-6">
+      <form method="post" action="/auth/ip/block" class="grid grid-cols-3 gap-3">
+        <input required name="ip" placeholder="192.0.2.40" class="input font-mono">
+        <input name="note" placeholder="{{ t('security.note_ph') }}" class="input col-span-2">
+        <div class="col-span-3 flex items-center justify-between pt-2">
+          <span class="text-xs text-slate-500">{{ t('security.my_ip') }}: <span class="font-mono">{{ my_ip or '—' }}</span></span>
+          <div class="flex gap-2">
+            <button type="button" @click="showForm = false" class="btn btn-ghost">{{ t('common.cancel') }}</button>
+            <button type="submit" class="btn btn-primary">{{ t('security.block') }}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>IP</th>
+            <th>{{ t('security.col.note') }}</th>
+            <th>{{ t('security.col.by') }}</th>
+            <th>{{ t('security.col.at') }}</th>
+            <th class="text-right"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in blocked %}
+          <tr>
+            <td class="font-mono text-slate-800">{{ b.ip }}</td>
+            <td class="text-slate-600">{{ b.note or '—' }}</td>
+            <td class="text-slate-500">{{ b.blocked_by or '—' }}</td>
+            <td class="text-slate-500">{{ b.at|localtime }}</td>
+            <td class="text-right">
+              <form method="post" action="/auth/ip/unblock" class="inline">
+                <input type="hidden" name="ip" value="{{ b.ip }}">
+                <button type="submit" class="text-slate-600 hover:underline text-xs">{{ t('security.unblock') }}</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          {% if not blocked %}
+          <tr><td colspan="5" class="text-slate-400 italic">{{ t('security.no_blocked') }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- IP ozeti: "hangi adresten kac deneme" tek bakista -->
+  <div class="card overflow-hidden">
+    <div class="card-header">
+      <h2 class="card-title">{{ t('security.ips.title') }}</h2>
+      <p class="card-subtitle">{{ t('security.ips.note') }}</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>IP</th>
+            <th>{{ t('security.col.users') }}</th>
+            <th>{{ t('security.col.ok') }}</th>
+            <th>{{ t('security.col.failed') }}</th>
+            <th>{{ t('security.col.last') }}</th>
+            <th class="text-right"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in ip_summary %}
+          {% set failed = row.total - (row.ok or 0) %}
+          <tr>
+            <td class="font-mono text-slate-800">
+              {{ row.ip }}
+              {% if row.ip == my_ip %}<span class="badge badge-blue ml-1">{{ t('security.you') }}</span>{% endif %}
+            </td>
+            <td class="text-slate-600 text-xs">{{ row.usernames }}</td>
+            <td class="text-slate-600">{{ row.ok or 0 }}</td>
+            <td class="{% if failed %}text-rose-600 font-medium{% else %}text-slate-400{% endif %}">{{ failed }}</td>
+            <td class="text-slate-500">{{ row.last_at|localtime }}</td>
+            <td class="text-right">
+              {% if row.ip != my_ip %}
+              <form method="post" action="/auth/ip/block" class="inline"
+                    onsubmit='return confirm({{ t("security.confirm_block")|tojson }})'>
+                <input type="hidden" name="ip" value="{{ row.ip }}">
+                <input type="hidden" name="note" value="{{ t('security.note_from_list') }}">
+                <button type="submit" class="text-rose-600 hover:underline text-xs">{{ t('security.block') }}</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          {% if not ip_summary %}
+          <tr><td colspan="6" class="text-slate-400 italic">{{ t('security.no_events') }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Ham giris kaydi -->
+  <div class="card overflow-hidden">
+    <div class="card-header flex items-center justify-between">
+      <div>
+        <h2 class="card-title">{{ t('security.log.title') }}</h2>
+        <p class="card-subtitle">{{ t('security.log.note') }}</p>
+      </div>
+      <a href="/settings/security{% if not only_failed %}?failed=1{% endif %}"
+         class="btn {% if only_failed %}btn-primary{% else %}btn-ghost{% endif %}">
+        {{ t('security.only_failed') }}
+      </a>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>{{ t('security.col.at') }}</th>
+            <th>{{ t('auth.username') }}</th>
+            <th>IP</th>
+            <th>{{ t('field.status') }}</th>
+            <th>{{ t('security.col.agent') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in events %}
+          <tr>
+            <td class="text-slate-500 whitespace-nowrap">{{ e.at|localtime }}</td>
+            <td class="font-medium text-slate-800">{{ e.username }}</td>
+            <td class="font-mono text-slate-600">{{ e.ip or '—' }}</td>
+            <td>
+              {% if e.success %}
+              <span class="badge badge-emerald"><span class="badge-dot"></span>{{ t('security.ok') }}</span>
+              {% else %}
+              <span class="badge badge-rose">{{ t('security.reason.' ~ e.reason) }}</span>
+              {% endif %}
+            </td>
+            <td class="text-slate-400 text-xs truncate max-w-xs">{{ e.user_agent or '—' }}</td>
+          </tr>
+          {% endfor %}
+          {% if not events %}
+          <tr><td colspan="5" class="text-slate-400 italic">{{ t('security.no_events') }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    {#
+      Duz baglanti, HTMX degil: bu sayfada hic HTMX yok ve "Yalnizca basarisiz"
+      dugmesi de bir baglanti — takip listesindeki HTMX'in gerekcesi 30 saniyelik
+      otomatik tazelemeydi, burada oyle bir sey yok.
+      `failed` baglantida TASINIR: yoksa "sonraki"ye basan yonetici suzgeci
+      sessizce kaybederdi. (Suzgec dugmesi ise `page` tasimaz — suzgec degisince
+      basa donmek dogru.)
+    #}
+    {% if pages > 1 %}
+    {% set q = '&failed=1' if only_failed else '' %}
+    <div class="border-t border-slate-200 bg-slate-50 px-6 py-2.5">
+      <div class="flex items-center justify-center gap-4 text-xs text-slate-600">
+        {% if page > 1 %}
+        <a href="/settings/security?page={{ page - 1 }}{{ q }}" class="btn btn-ghost btn-sm"
+           aria-label="{{ t('common.prev_page') }}">&lsaquo;</a>
+        {% else %}
+        <span class="btn btn-ghost btn-sm opacity-30 cursor-not-allowed">&lsaquo;</span>
+        {% endif %}
+        <span>{{ t('common.page_range', a=page_from, b=page_to, total=events_total) }}</span>
+        {% if page < pages %}
+        <a href="/settings/security?page={{ page + 1 }}{{ q }}" class="btn btn-ghost btn-sm"
+           aria-label="{{ t('common.next_page') }}">&rsaquo;</a>
+        {% else %}
+        <span class="btn btn-ghost btn-sm opacity-30 cursor-not-allowed">&rsaquo;</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

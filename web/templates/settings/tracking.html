@@ -1,0 +1,19 @@
+{% extends "settings_base.html" %}
+
+{% block section %}
+<div class="card overflow-hidden">
+  <div class="card-header">
+    <h2 class="card-title">{{ title }}</h2>
+    <p class="card-subtitle">{{ note }}</p>
+  </div>
+
+  <form method="post" action="/settings/tracking" class="p-6 space-y-4">
+    {% for f in fields %}
+      {% include "_partials/settings_field.html" %}
+    {% endfor %}
+    <div class="flex justify-end pt-2">
+      <button type="submit" class="btn btn-primary">{{ t('common.save') }}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

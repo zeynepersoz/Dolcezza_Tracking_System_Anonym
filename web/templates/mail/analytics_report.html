@@ -1,0 +1,336 @@
+{# Mail govdesi — Dolcezza Order Management System Lojistik & Teslimat Sureleri Analiz Raporu.
+   Outlook ve mobil uyumlu, inline CSS, koyu yonetici temasi (Dark Executive Theme). #}
+<!doctype html>
+<html lang="tr" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>{{ subject }}</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:AllowPNG/>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#0b0f19;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0b0f19;padding:24px 8px;">
+  <tr>
+    <td align="center" valign="top">
+
+      <!-- Ana Konteyner -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:760px;width:100%;background-color:#111827;border-radius:14px;border:1px solid #1f2937;overflow:hidden;box-shadow:0 10px 25px -5px rgba(0,0,0,0.5);">
+
+        <!-- Header / Baslik Alani -->
+        <tr>
+          <td style="background:linear-space;background-color:#0f172a;padding:24px 28px;border-bottom:1px solid #1e293b;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="middle">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td style="padding-right:14px;" valign="middle">
+                        <div style="background:linear-gradient(135deg,#2563eb,#1d4ed8);width:44px;height:44px;border-radius:10px;text-align:center;line-height:44px;color:#ffffff;font-weight:800;font-size:20px;letter-spacing:1px;border:1px solid #3b82f6;">
+                          D
+                        </div>
+                      </td>
+                      <td valign="middle">
+                        <div style="color:#f8fafc;font-size:18px;font-weight:800;letter-spacing:0.5px;text-transform:uppercase;">
+                          DOLCEZZA EUROPE LOGISTICS REPORT
+                        </div>
+                        <div style="color:#94a3b8;font-size:13px;font-weight:500;margin-top:2px;">
+                          FA26 Sevkiyat &amp; Teslimat Süreleri Analizi
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+                <td align="right" valign="middle" style="color:#64748b;font-size:12px;line-height:1.5;">
+                  <span style="color:#cbd5e1;font-weight:600;">Rapor Tarihi:</span> {{ report_date }}<br>
+                  <span style="color:#64748b;">Kaynak:</span> <span style="color:#94a3b8;font-family:Consolas,monospace;">{{ source_view }}</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- KPI Ozeti (4 Kart) -->
+        <tr>
+          <td style="padding:22px 24px 10px 24px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <!-- Kart 1: Toplam Sevkiyat -->
+                <td width="25%" style="padding:4px;" valign="top">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#1e293b;border:1px solid #334155;border-radius:10px;text-align:center;">
+                    <tr>
+                      <td style="padding:14px 10px;">
+                        <div style="font-size:10px;font-weight:700;letter-spacing:0.6px;color:#94a3b8;text-transform:uppercase;">TOPLAM SEVKİYAT</div>
+                        <div style="font-size:26px;font-weight:800;color:#f8fafc;margin-top:4px;">{{ overall.box_count }}</div>
+                        <div style="font-size:11px;color:#64748b;margin-top:4px;">{{ overall.item_count }} Ürün ({{ overall.country_count }} Ülke)</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+
+                <!-- Kart 2: Normal Teslimat -->
+                <td width="25%" style="padding:4px;" valign="top">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#1e293b;border:1px solid #059669;border-radius:10px;text-align:center;">
+                    <tr>
+                      <td style="padding:14px 10px;">
+                        <div style="font-size:10px;font-weight:700;letter-spacing:0.6px;color:#34d399;text-transform:uppercase;">NORMAL TESLİMAT</div>
+                        <div style="font-size:26px;font-weight:800;color:#34d399;margin-top:4px;">{{ overall.avg_total_normal }} Gün</div>
+                        <div style="font-size:11px;color:#64748b;margin-top:4px;">Sorunsuz Gönderiler</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+
+                <!-- Kart 3: GLS Kurye Dagitim -->
+                <td width="25%" style="padding:4px;" valign="top">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#1e293b;border:1px solid #0284c7;border-radius:10px;text-align:center;">
+                    <tr>
+                      <td style="padding:14px 10px;">
+                        <div style="font-size:10px;font-weight:700;letter-spacing:0.6px;color:#38bdf8;text-transform:uppercase;">GLS KURYE DAĞITIM</div>
+                        <div style="font-size:26px;font-weight:800;color:#38bdf8;margin-top:4px;">{{ overall.avg_gls_normal }} Gün</div>
+                        <div style="font-size:11px;color:#64748b;margin-top:4px;">GLS Giriş &rarr; Alıcıya Teslim</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+
+                <!-- Kart 4: Lokal Gecikmeli -->
+                <td width="25%" style="padding:4px;" valign="top">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#1e293b;border:1px solid #e11d48;border-radius:10px;text-align:center;">
+                    <tr>
+                      <td style="padding:14px 10px;">
+                        <div style="font-size:10px;font-weight:700;letter-spacing:0.6px;color:#f87171;text-transform:uppercase;">LOKAL GECİKMELİ</div>
+                        <div style="font-size:26px;font-weight:800;color:#f87171;margin-top:4px;">{{ overall.delayed_count }} Kargo</div>
+                        <div style="font-size:11px;color:#64748b;margin-top:4px;">{{ overall.delayed_items }} Ürün (Ort. {{ overall.avg_gls_delayed }}g GLS)</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Lokal Teslimat Gecikmeleri Bilgilendirme Kutusu -->
+        <tr>
+          <td style="padding:10px 24px 16px 24px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#2a1b0a;border:1px solid #b45309;border-radius:10px;">
+              <tr>
+                <td style="padding:16px 18px;">
+                  <div style="font-size:13px;font-weight:700;color:#fbbf24;margin-bottom:6px;">
+                    ⚠️ Lokal Teslimat Gecikmeleri Hakkında
+                  </div>
+                  <div style="font-size:12px;color:#fed7aa;line-height:1.6;">
+                    Dağıtım esnasında alıcının mağazada bulunmaması, ileri tarihli teslimat randevusu gibi lokal müşteri nedenleriyle geciken gönderiler genel ortalamayı yükseltmektedir. Sıkıntısız kargolarda GLS kurye kapı teslimatı ortalama <strong style="color:#ffffff;">{{ overall.avg_gls_normal }} günde</strong> tamamlanırken, bu tür lokal gecikmelerde süre ortalama <strong style="color:#ffffff;">{{ overall.avg_gls_delayed }} güne</strong> çıkmaktadır. Tabloda sorunsuz gönderi süreleri ayrıca hesaplanarak sunulmuştur.
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- BOLUM 1: Ulke Bazli Teslimat Sureleri Tablosu -->
+        <tr>
+          <td style="padding:14px 24px 8px 24px;">
+            <div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:10px;letter-spacing:0.3px;">
+              📊 Ülke Bazlı Teslimat Süreleri ve Lokal Gecikme Analizi
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#1e293b;border-radius:10px;border:1px solid #334155;overflow:hidden;">
+              <thead>
+                <tr style="background-color:#0f172a;border-bottom:1px solid #334155;">
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">ÜLKE</th>
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">GÖNDERİ / ÜRÜN</th>
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">EMC &rarr; GLS</th>
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">GLS &rarr; BUTİK</th>
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">ORT. TESLİMAT</th>
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">LOKAL GECİKME</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in countries %}
+                <tr style="border-bottom:1px solid #334155;background-color:{% if loop.index % 2 == 0 %}#172033{% else %}#1e293b{% endif %};">
+                  <td style="padding:10px 12px;font-size:13px;font-weight:800;color:#f8fafc;">{{ row.name }}</td>
+                  <td style="padding:10px 12px;font-size:12px;color:#cbd5e1;">
+                    <span style="font-weight:600;color:#f1f5f9;">{{ row.box_count }} Koli</span><br>
+                    <span style="font-size:11px;color:#94a3b8;">({{ row.item_count }} Ürün)</span>
+                  </td>
+                  <td style="padding:10px 12px;font-size:12px;font-weight:700;color:#38bdf8;">
+                    {{ row.emc_gls }}
+                  </td>
+                  <td style="padding:10px 12px;font-size:11px;line-height:1.4;">
+                    {% if row.gls_normal %}
+                    <span style="color:#34d399;font-weight:700;">{{ row.gls_normal }}</span> <span style="color:#64748b;">(Normal)</span>
+                    {% endif %}
+                    {% if row.gls_delayed %}
+                    <br><span style="color:#f87171;font-weight:700;">{{ row.gls_delayed }}</span> <span style="color:#64748b;">(Gecikmeli)</span>
+                    {% endif %}
+                    {% if not row.gls_normal and not row.gls_delayed %}
+                    <span style="color:#94a3b8;">{{ row.gls_single }}</span>
+                    {% endif %}
+                  </td>
+                  <td style="padding:10px 12px;font-size:12px;">
+                    <span style="color:#fbbf24;font-weight:700;">{{ row.avg_delivery }}</span>
+                    {% if row.overall_delivery %}
+                    <br><span style="font-size:10px;color:#94a3b8;">(Genel: {{ row.overall_delivery }})</span>
+                    {% endif %}
+                  </td>
+                  <td style="padding:10px 12px;font-size:11px;">
+                    {% if row.delayed_count %}
+                    <span style="display:inline-block;background-color:#451a03;color:#fbbf24;border:1px solid #92400e;padding:2px 8px;border-radius:6px;font-weight:700;">
+                      ⚠️ {{ row.delayed_count }} Kargo
+                    </span>
+                    {% else %}
+                    <span style="display:inline-block;background-color:#064e3b;color:#34d399;border:1px solid #065f46;padding:2px 8px;border-radius:6px;font-weight:600;">
+                      ✅ Sorunsuz
+                    </span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+
+        <!-- BOLUM 2: Shipment Method (Sevkiyat Sekli) Analizi Tablosu -->
+        <tr>
+          <td style="padding:18px 24px 8px 24px;">
+            <div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:10px;letter-spacing:0.3px;">
+              🚚 Sevkiyat Yöntemi (Shipment Method) Analizi
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#1e293b;border-radius:10px;border:1px solid #334155;overflow:hidden;">
+              <thead>
+                <tr style="background-color:#0f172a;border-bottom:1px solid #334155;">
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">SEVKİYAT YÖNTEMİ</th>
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">GÖNDERİ / ÜRÜN</th>
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">EMC &rarr; GLS</th>
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">GLS &rarr; BUTİK</th>
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">ORT. TESLİMAT</th>
+                  <th align="left" style="padding:10px 12px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">LOKAL GECİKME</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for method in methods %}
+                <tr style="border-bottom:1px solid #334155;background-color:{% if loop.index % 2 == 0 %}#172033{% else %}#1e293b{% endif %};">
+                  <td style="padding:10px 12px;font-size:12px;font-weight:700;color:#f8fafc;">
+                    {{ method.name }}
+                  </td>
+                  <td style="padding:10px 12px;font-size:12px;color:#cbd5e1;">
+                    <span style="font-weight:600;color:#f1f5f9;">{{ method.box_count }} Koli</span><br>
+                    <span style="font-size:11px;color:#94a3b8;">({{ method.item_count }} Ürün)</span>
+                  </td>
+                  <td style="padding:10px 12px;font-size:12px;font-weight:700;color:#38bdf8;">
+                    {{ method.emc_gls }}
+                  </td>
+                  <td style="padding:10px 12px;font-size:11px;line-height:1.4;">
+                    {% if method.gls_normal %}
+                    <span style="color:#34d399;font-weight:700;">{{ method.gls_normal }}</span> <span style="color:#64748b;">(Normal)</span>
+                    {% endif %}
+                    {% if method.gls_delayed %}
+                    <br><span style="color:#f87171;font-weight:700;">{{ method.gls_delayed }}</span> <span style="color:#64748b;">(Gecikmeli)</span>
+                    {% endif %}
+                    {% if not method.gls_normal and not method.gls_delayed %}
+                    <span style="color:#94a3b8;">{{ method.gls_single }}</span>
+                    {% endif %}
+                  </td>
+                  <td style="padding:10px 12px;font-size:12px;">
+                    <span style="color:#fbbf24;font-weight:700;">{{ method.avg_delivery }}</span>
+                    {% if method.overall_delivery %}
+                    <br><span style="font-size:10px;color:#94a3b8;">(Genel: {{ method.overall_delivery }})</span>
+                    {% endif %}
+                  </td>
+                  <td style="padding:10px 12px;font-size:11px;">
+                    {% if method.delayed_count %}
+                    <span style="display:inline-block;background-color:#451a03;color:#fbbf24;border:1px solid #92400e;padding:2px 8px;border-radius:6px;font-weight:700;">
+                      ⚠️ {{ method.delayed_count }} Kargo
+                    </span>
+                    {% else %}
+                    <span style="display:inline-block;background-color:#064e3b;color:#34d399;border:1px solid #065f46;padding:2px 8px;border-radius:6px;font-weight:600;">
+                      ✅ Sorunsuz
+                    </span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+
+        <!-- BOLUM 3: Son Teslim Edilen Gonderi Ornekleri (Son 20 Kargo) -->
+        <tr>
+          <td style="padding:18px 24px 22px 24px;">
+            <div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:10px;letter-spacing:0.3px;">
+              📦 Son Teslim Edilen Gönderi Örnekleri (Son 20 Kargo)
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#1e293b;border-radius:10px;border:1px solid #334155;overflow:hidden;">
+              <thead>
+                <tr style="background-color:#0f172a;border-bottom:1px solid #334155;">
+                  <th align="left" style="padding:9px 10px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">MÜŞTERİ &amp; ÜLKE</th>
+                  <th align="left" style="padding:9px 10px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">TRACKING NO</th>
+                  <th align="left" style="padding:9px 10px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">PAKETLEME</th>
+                  <th align="left" style="padding:9px 10px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">GLS OKUTMA</th>
+                  <th align="left" style="padding:9px 10px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">TESLİMAT</th>
+                  <th align="left" style="padding:9px 10px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;">TOPLAM SÜRE</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in samples %}
+                <tr style="border-bottom:1px solid #334155;background-color:{% if loop.index % 2 == 0 %}#172033{% else %}#1e293b{% endif %};">
+                  <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#f8fafc;">
+                    {{ item.customer }} <span style="color:#94a3b8;font-weight:500;">({{ item.country }})</span>
+                  </td>
+                  <td style="padding:8px 10px;font-size:11px;font-family:Consolas,monospace;color:#38bdf8;">
+                    {{ item.tracking_no }}
+                  </td>
+                  <td style="padding:8px 10px;font-size:11px;color:#94a3b8;">
+                    {{ item.packaging_date }}
+                  </td>
+                  <td style="padding:8px 10px;font-size:11px;color:#cbd5e1;">
+                    {{ item.gls_scanned }}
+                  </td>
+                  <td style="padding:8px 10px;font-size:11px;color:#34d399;font-weight:600;">
+                    {{ item.delivered_date }}
+                  </td>
+                  <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#fbbf24;">
+                    {{ item.total_days }}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Footer / Alt Bilgi -->
+        <tr>
+          <td style="background-color:#0f172a;padding:20px 28px;border-top:1px solid #1e293b;text-align:center;">
+            <div style="font-size:12px;font-weight:600;color:#cbd5e1;">
+              Dolcezza Order Management System &middot; Avrupa Lojistik Takip Sistemi
+            </div>
+            <div style="font-size:11px;color:#64748b;margin-top:6px;line-height:1.5;">
+              Bu e-posta Dolcezza Order Management System tarafından otomatik üretilmiştir.<br>
+              Tüm süreler iş günü (hafta sonu hariç) bazında hesaplanmıştır.
+            </div>
+          </td>
+        </tr>
+
+      </table>
+      <!-- /Ana Konteyner -->
+
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

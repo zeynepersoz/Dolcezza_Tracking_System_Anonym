@@ -1,0 +1,26 @@
+services:
+  web:
+    build: .
+    image: gls-pod-system:latest
+    env_file:
+      - .env
+    environment:
+      OUTPUT_DIR: /data/output
+    volumes:
+      # Bind mount: SQLite dosyalari host'ta gorunur, yedeklemesi kolay.
+      - ./data:/home/appuser/.gls_pod
+      - ./output:/data/output
+    ports:
+      # Disaridan 8765 (eski surumun portu), container icinde 8000.
+      - "${WEB_PORT:-8765}:8000"
+    restart: unless-stopped
+
+  # Sadece gelistirme/kimliksiz test icin — GLS_MODE=mock iken web servisinin
+  # bagimli oldugu sahte GLS API'lerini saglar. Prod'da kullanilmaz.
+  mock:
+    build: .
+    image: gls-pod-system:latest
+    command: uvicorn gls_api.mock_server:app --host 0.0.0.0 --port 8788
+    ports:
+      - "8788:8788"
+    profiles: ["dev"]

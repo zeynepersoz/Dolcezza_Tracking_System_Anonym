@@ -1,0 +1,30 @@
+{% extends "settings_base.html" %}
+
+{% block section %}
+<div class="card overflow-hidden">
+  <div class="card-header">
+    <h2 class="card-title">{{ title }}</h2>
+    <p class="card-subtitle">{{ note }}</p>
+  </div>
+
+  <form method="post" action="/settings/whatsapp" class="p-6 space-y-4">
+    {% for f in fields %}
+      {% include "_partials/settings_field.html" %}
+    {% endfor %}
+
+    {% if wa_status %}
+    <div class="text-sm text-slate-600 pt-1">
+      {{ t('settings.wa_status') }}:
+      <span class="badge {% if wa_status[0] %}badge-emerald{% else %}badge-slate{% endif %}">
+        {{ wa_status[1] }}
+      </span>
+    </div>
+    {% endif %}
+
+    <div class="flex items-center justify-between pt-2">
+      <span class="badge badge-slate">{{ t('settings.wa_test_soon') }}</span>
+      <button type="submit" class="btn btn-primary">{{ t('common.save') }}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

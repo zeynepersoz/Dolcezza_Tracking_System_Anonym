@@ -1,0 +1,23 @@
+{# Arsivin govdesi: ya klasor izgarasi ya dosya tablosu. Ikisi TEK parcada,
+   cunku HTMX aramasi ikisi arasinda gecis yapiyor (arama klasorleri atlar) —
+   ayri hedefler olsaydi arama sonucu klasorlerin altina cizilirdi. #}
+{% if level %}
+  {% include "_partials/archive_folders.html" %}
+{% else %}
+<div class="overflow-x-auto">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>{{ t('field.tracking_no') }}</th>
+        <th>{{ t('field.store_code') }}</th>
+        <th>{{ t('field.invoice_number') }}</th>
+        <th>{{ t('archive.date') }}</th>
+        <th class="text-right">{{ t('archive.documents') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% include "_partials/archive_rows.html" %}
+    </tbody>
+  </table>
+</div>
+{% endif %}

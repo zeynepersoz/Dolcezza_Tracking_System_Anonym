@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}{{ t('completion.title') }}{% endblock %}
+
+{% block content %}
+{#
+  İş biriminin istegi (2026-08-31): "80000 adet urun siparisi var 60000 tane
+  urun tr den cikti tamamlanma 6/8 ya bir de bunun aslinda musterinin eline
+  ulasmis olanlari var" — uc seviye: siparis / sevk / teslim.
+  Veri: erp/orders.py + tracking/completion_report.py.
+#}
+{% set r = report %}
+
+<div class="flex items-start justify-between gap-3 flex-wrap">
+  <div>
+    <h1 class="text-lg font-bold text-slate-900">{{ t('completion.title') }}</h1>
+    <p class="card-subtitle mt-0.5">{{ t('completion.subtitle', season=r.season or '—') }}</p>
+  </div>
+  {% if r.has_data %}
+  <div class="flex items-center gap-2">
+    <a href="/reports/completion/export.xlsx" class="btn btn-secondary btn-sm">{{ t('export.xlsx') }}</a>
+    <a href="/reports/completion/export.pdf" class="btn btn-secondary btn-sm">{{ t('export.pdf') }}</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if not r.has_data %}
+<div class="card p-8 text-center text-slate-500 mt-4">{{ t('completion.no_data') }}</div>
+{% else %}
+
+{# Dort kart: siparisten teslime akisin her adimi, hepsi URUN ADEDI. #}
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
+  <div class="card p-5">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('completion.card.ordered') }}</div>
+    <div class="mt-2 text-3xl font-bold text-slate-900">{{ '{:,}'.format(r.order_qty) }}</div>
+    <div class="mt-1 text-xs text-slate-400">
+      {{ t('completion.card.ordered_note', orders=r.order_count, customers=r.customer_count) }}
+    </div>
+  </div>
+
+  <div class="card p-5">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('completion.card.shipped') }}</div>
+    <div class="mt-2 text-3xl font-bold text-sky-600">{{ '{:,}'.format(r.inv_qty) }}</div>
+    <div class="mt-1 text-xs text-slate-400">
+      {% if r.pct_shipped is not none %}
+        <span class="font-semibold text-sky-700">%{{ r.pct_shipped }}</span> {{ t('completion.of_ordered') }}
+      {% else %}{{ t('completion.card.shipped_note') }}{% endif %}
+    </div>
+  </div>
+
+  <div class="card p-5">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('completion.card.boxed') }}</div>
+    <div class="mt-2 text-3xl font-bold text-slate-900">{{ '{:,}'.format(r.boxed_qty) }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ t('completion.card.boxed_note') }}</div>
+  </div>
+
+  <div class="card p-5 border-emerald-200">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('completion.card.delivered') }}</div>
+    <div class="mt-2 text-3xl font-bold text-emerald-600">{{ '{:,}'.format(r.delivered_qty) }}</div>
+    <div class="mt-1 text-xs text-slate-400">
+      {% if r.pct_delivered_of_boxed is not none %}
+        <span class="font-semibold text-emerald-700">%{{ r.pct_delivered_of_boxed }}</span> {{ t('completion.of_boxed') }}
+      {% else %}{{ t('completion.card.delivered_note') }}{% endif %}
+    </div>
+  </div>
+</div>
+
+{# Akis cubugu: siparis paydadir, digerleri onun icinde daralan dilimler. #}
+<div class="card p-6 mt-4">
+  <div class="flex h-3 rounded-full overflow-hidden bg-slate-100">
+    <div class="bg-emerald-500" style="width: {{ (r.delivered_qty / r.order_qty * 100)|round(1) }}%"></div>
+    <div class="bg-sky-500" style="width: {{ ((r.inv_qty - r.delivered_qty) / r.order_qty * 100)|round(1) if r.inv_qty > r.delivered_qty else 0 }}%"></div>
+  </div>
+  <div class="flex items-center gap-4 mt-3 text-[11px] text-slate-500 flex-wrap">
+    <div class="flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+      {{ t('completion.card.delivered') }} · {{ '{:,}'.format(r.delivered_qty) }}
+    </div>
+    <div class="flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+      {{ t('completion.card.shipped') }} · {{ '{:,}'.format(r.inv_qty) }}
+    </div>
+    <div class="flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-slate-200"></span>
+      {{ t('completion.card.ordered') }} · {{ '{:,}'.format(r.order_qty) }}
+    </div>
+  </div>
+</div>
+
+{# Kapsam farki GIZLENMEZ: 1./2. seviye ERP'nin tum siparis listesinden,
+   3. seviye yalnizca takip ettigimiz GLS NL kanalindan gelir. #}
+<div class="card p-5 mt-4 bg-amber-50 border-amber-200">
+  <div class="flex items-start gap-3">
+    <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </div>
+    <div>
+      <div class="font-semibold text-amber-900 text-sm">{{ t('completion.scope_title') }}</div>
+      <p class="text-sm text-amber-800 mt-1 leading-relaxed">{{ t('completion.scope_body') }}</p>
+    </div>
+  </div>
+</div>
+
+<div class="card overflow-hidden mt-6">
+  <div class="px-6 py-4 border-b border-slate-100">
+    <h2 class="card-title">{{ t('completion.table_title') }}</h2>
+  </div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{ t('reports.col.country') }}</th>
+          <th>{{ t('completion.col.ordered') }}</th>
+          <th>{{ t('completion.col.shipped') }}</th>
+          <th>{{ t('completion.col.boxed') }}</th>
+          <th>{{ t('completion.col.delivered') }}</th>
+          <th class="w-40">{{ t('completion.col.pct_shipped') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in r.by_country %}
+        <tr>
+          <td class="font-semibold text-slate-800">{{ row.country }}</td>
+          <td class="text-slate-700">{{ '{:,}'.format(row.order_qty) }}</td>
+          <td class="text-sky-700 font-medium">{{ '{:,}'.format(row.inv_qty) }}</td>
+          <td class="text-xs text-slate-500">
+            {% if row.is_tracked %}{{ '{:,}'.format(row.boxed_qty) }}
+            {% else %}<span class="text-slate-300">{{ t('completion.not_tracked') }}</span>{% endif %}
+          </td>
+          <td>
+            {% if row.is_tracked %}
+              <span class="text-emerald-700 font-semibold">{{ '{:,}'.format(row.delivered_qty) }}</span>
+            {% else %}<span class="text-slate-300">—</span>{% endif %}
+          </td>
+          <td>
+            {% if row.pct_shipped is not none %}
+            <div class="flex items-center gap-2">
+              <div class="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                <div class="bg-sky-500 h-full" style="width: {{ row.pct_shipped }}%"></div>
+              </div>
+              <span class="text-xs text-slate-600 w-11 text-right">%{{ row.pct_shipped }}</span>
+            </div>
+            {% else %}<span class="text-slate-300">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

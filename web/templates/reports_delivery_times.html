@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}{{ t('reports.title') }}{% endblock %}
+
+{% block content %}
+{#
+  İş biriminin "Dolcezza Data Analyzer" mailindeki (FA26 Europe Sevkiyat &
+  Teslimat Süreleri Analiz Raporu) bicimin panel karsiligi (kullanici istegi,
+  2026-08-31). Uc bacak: paketleme->GLS, GLS->magaza (normal/gecikmeli), ve
+  uctan uca. Tum sureler is gunu (hafta sonu haric) — bkz. tracking/delivery_report.py.
+
+  ParcelShop teslimatlari BURADA DEGIL — kendi sayfasi (`reports_parcel_shop.html`),
+  kullanici istegi (2026-08-31): "reports kutusuna bastığında altta parcelshop
+  deliveries ve delivery times adlı iki ayrı alan açıp oradan da seçmesi lazım".
+#}
+{% set r = report %}
+
+<div class="flex items-start justify-between gap-3 flex-wrap">
+  <div>
+    <h1 class="text-lg font-bold text-slate-900">{{ t('reports.title') }}</h1>
+    <p class="card-subtitle mt-0.5">{{ t('reports.subtitle') }}</p>
+  </div>
+  <div class="flex items-center gap-2">
+    <span class="badge badge-slate">{{ t('reports.weekend_note') }}</span>
+    {% if r.has_data %}
+    <a href="/reports/delivery-times/export.xlsx?carrier={{ r.channel }}" class="btn btn-secondary btn-sm">{{ t('export.xlsx') }}</a>
+    <a href="/reports/delivery-times/export.pdf?carrier={{ r.channel }}" class="btn btn-secondary btn-sm">{{ t('export.pdf') }}</a>
+    {% endif %}
+  </div>
+</div>
+
+{# Tasima firmasi sekmeleri (kullanici istegi 2026-09-03): rapor GLS-NL,
+   GLS-IE ve FEDEX icin ayri hazirlanir. #}
+<div class="flex items-center gap-1 mt-4 border-b border-slate-200">
+  {% for code, label in r.channels %}
+  <a href="/reports/delivery-times?carrier={{ code }}"
+     class="px-3 py-1.5 text-sm font-medium -mb-px border-b-2 transition
+            {% if code == r.channel %}border-slate-900 text-slate-900{% else %}border-transparent text-slate-500 hover:text-slate-700{% endif %}">
+    {{ label }}
+  </a>
+  {% endfor %}
+</div>
+
+{% if not r.has_data %}
+<div class="card p-8 text-center text-slate-500 mt-4">{{ t('reports.no_data') }}</div>
+{% else %}
+
+{% set o = r.overall %}
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
+  <div class="card p-5">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('reports.card.total_title') }}</div>
+    <div class="mt-2 text-3xl font-bold text-slate-900">{{ o.box_count }}</div>
+    <div class="mt-1 text-xs text-slate-400">
+      {{ t('reports.card.total_note', items=('{:,}'.format(o.item_count) if r.has_items else t('reports.no_value')), countries=r.country_count) }}
+    </div>
+  </div>
+
+  <div class="card p-5">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('reports.card.normal_title') }}</div>
+    <div class="mt-2 text-3xl font-bold text-emerald-600">
+      {{ o.avg_total_normal if o.avg_total_normal is not none else t('reports.no_value') }}
+    </div>
+    <div class="mt-1 text-xs text-slate-400">{{ t('reports.card.normal_note') }}</div>
+  </div>
+
+  <div class="card p-5">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('reports.card.courier_title') }}</div>
+    <div class="mt-2 text-3xl font-bold text-slate-900">
+      {{ o.avg_gls_normal if o.avg_gls_normal is not none else t('reports.no_value') }}
+    </div>
+    <div class="mt-1 text-xs text-slate-400">{{ t('reports.card.courier_note') }}</div>
+  </div>
+
+  <div class="card p-5 {% if o.delayed_count %}border-rose-200{% endif %}">
+    <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('reports.card.delayed_title') }}</div>
+    <div class="mt-2 text-3xl font-bold text-rose-600">{{ o.delayed_count }}</div>
+    <div class="mt-1 text-xs text-slate-400">
+      {{ t('reports.card.delayed_note',
+           items=('{:,}'.format(o.delayed_items) if r.has_items else t('reports.no_value')),
+           days=(o.avg_gls_delayed if o.avg_gls_delayed is not none else t('reports.no_value'))) }}
+    </div>
+  </div>
+</div>
+
+{% if o.delayed_count and o.avg_gls_normal is not none and o.avg_gls_delayed is not none %}
+<div class="card p-5 mt-4 bg-amber-50 border-amber-200">
+  <div class="flex items-start gap-3">
+    <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.75-2.98l-7.07-12.02a2 2 0 00-3.5 0L3.18 16.02A2 2 0 004.93 19z"/>
+      </svg>
+    </div>
+    <div>
+      <div class="font-semibold text-amber-900 text-sm">{{ t('reports.warning_title') }}</div>
+      <p class="text-sm text-amber-800 mt-1 leading-relaxed">
+        {{ t('reports.warning_body', normal=o.avg_gls_normal, delayed=o.avg_gls_delayed) }}
+      </p>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% macro leg_cell(normal, delayed) %}
+  {% if normal is not none %}
+    <span class="text-emerald-700 font-semibold">{{ normal }}</span>
+    <span class="text-slate-400">({{ t('reports.normal') }})</span>
+  {% endif %}
+  {% if delayed is not none %}
+    <br>
+    <span class="text-rose-600 font-semibold">{{ delayed }}</span>
+    <span class="text-slate-400">({{ t('reports.delayed') }})</span>
+  {% endif %}
+  {% if normal is none and delayed is none %}{{ t('reports.no_value') }}{% endif %}
+{% endmacro %}
+
+{% macro breakdown_table(title, rows, name_label) %}
+<div class="card overflow-hidden mt-6">
+  <div class="px-6 py-4 border-b border-slate-100">
+    <h2 class="card-title">{{ title }}</h2>
+  </div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{ name_label }}</th>
+          <th>{{ t('reports.col.shipment') }}</th>
+          <th>{{ t('reports.col.emc_gls') }}</th>
+          <th>{{ t('reports.col.gls_store') }}</th>
+          <th>{{ t('reports.col.avg_delivery') }}</th>
+          <th>{{ t('reports.col.local_delay') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="font-semibold text-slate-800">{{ row.name }}</td>
+          <td class="text-xs text-slate-500">
+            {{ t('reports.boxes', count=row.box_count) }}
+            {% if r.has_items %}<br>({{ '{:,}'.format(row.item_count) }}){% endif %}
+          </td>
+          <td>{{ row.avg_emc_to_gls if row.avg_emc_to_gls is not none else t('reports.no_value') }}</td>
+          <td class="whitespace-nowrap">{{ leg_cell(row.avg_gls_normal, row.avg_gls_delayed) }}</td>
+          <td>
+            {% if row.avg_total_normal is not none %}
+              <span class="font-semibold text-slate-800">{{ row.avg_total_normal }}</span>
+              {% if row.avg_total_overall is not none and row.avg_total_overall != row.avg_total_normal %}
+              <div class="text-xs text-slate-400">{{ t('reports.general', days=row.avg_total_overall) }}</div>
+              {% endif %}
+            {% else %}
+              {{ t('reports.no_value') }}
+            {% endif %}
+          </td>
+          <td>
+            {% if row.delayed_count %}
+            <span class="badge badge-amber">⚠ {{ t('reports.delay_count', count=row.delayed_count) }}</span>
+            {% else %}
+            <span class="text-slate-300">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endmacro %}
+
+{{ breakdown_table(t('reports.country_table_title'), r.by_country, t('reports.col.country')) }}
+{{ breakdown_table(t('reports.method_table_title'), r.by_method, t('reports.col.method')) }}
+
+{% endif %}
+{% endblock %}

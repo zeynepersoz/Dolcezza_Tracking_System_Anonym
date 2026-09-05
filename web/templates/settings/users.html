@@ -1,0 +1,145 @@
+{% extends "settings_base.html" %}
+
+{% block section %}
+<div class="card overflow-hidden" x-data="{ showForm: false, editing: null }">
+  <div class="card-header flex items-center justify-between">
+    <div>
+      <h2 class="card-title">{{ t('settings.users.title') }}</h2>
+      <p class="card-subtitle">{{ t('users.count', count=users|length) }}</p>
+    </div>
+    <button @click="showForm = !showForm" class="btn btn-accent">{{ t('users.new') }}</button>
+  </div>
+
+  {# Sifre sifirlama maili iki sarta bagli. Eksikse yoneticiye BURADA soylenir:
+     eksigi "kullanici giremiyor" cagrisiyla ogrenmek gec olurdu. #}
+  {% if not mail_ready %}
+  <div class="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-800">
+    {{ t('users.mail_not_ready') }}
+  </div>
+  {% endif %}
+  {% if not panel_url %}
+  <div class="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-800">
+    {{ t('users.panel_url_missing') }}
+  </div>
+  {% endif %}
+
+  <div x-show="showForm" x-transition class="border-b border-slate-100 bg-slate-50/70 p-6">
+    <form method="post" action="/auth/users/create" class="grid grid-cols-3 gap-3">
+      <input required name="username" placeholder="{{ t('auth.username') }}" class="input">
+      <input name="full_name" placeholder="{{ t('users.col.full_name') }}" class="input">
+      <input name="email" type="email" placeholder="{{ t('users.email') }}" class="input">
+      <input required name="password" type="password" minlength="8"
+             placeholder="{{ t('users.password_ph') }}" class="input">
+      <select name="role" class="input">
+        {% for r in roles %}
+        <option value="{{ r }}">{{ t_or('role.' ~ r, r) }}</option>
+        {% endfor %}
+      </select>
+      <div class="col-span-3 flex justify-end gap-2 pt-2">
+        <button type="button" @click="showForm = false" class="btn btn-ghost">{{ t('common.cancel') }}</button>
+        <button type="submit" class="btn btn-primary">{{ t('users.create') }}</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="overflow-x-auto">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>{{ t('auth.username') }}</th>
+        <th>{{ t('users.col.full_name') }}</th>
+        <th>{{ t('users.email') }}</th>
+        <th>{{ t('users.col.role') }}</th>
+        <th>{{ t('field.status') }}</th>
+        <th>{{ t('users.col.created') }}</th>
+        <th class="text-right"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td class="font-medium text-slate-800">{{ u.username }}</td>
+        <td class="text-slate-600">{{ u.full_name or '—' }}</td>
+        <td class="text-slate-600">
+          {% if u.email %}{{ u.email }}{% else %}
+          {# E-postasi olmayan hesap sifresini kendi sifirlayamaz — goze carpsin. #}
+          <span class="text-amber-600" title="{{ t('users.no_email') }}">—</span>
+          {% endif %}
+        </td>
+        <td>
+          <span class="badge {% if u.role == 'admin' %}badge-blue{% else %}badge-slate{% endif %}">{{ t_or('role.' ~ u.role, u.role) }}</span>
+        </td>
+        <td>
+          {% if u.is_active %}
+          <span class="badge badge-emerald"><span class="badge-dot"></span>{{ t('users.active') }}</span>
+          {% else %}
+          <span class="badge badge-slate">{{ t('users.inactive') }}</span>
+          {% endif %}
+        </td>
+        <td class="text-slate-500">{{ u.created_at|localtime }}</td>
+        <td class="text-right whitespace-nowrap">
+          <button type="button" @click="editing = (editing === {{ u.id }} ? null : {{ u.id }})"
+                  class="btn btn-secondary btn-sm">{{ t('users.edit') }}</button>
+          <form method="post" action="/auth/users/{{ u.id }}/toggle" class="inline ml-2"
+                onsubmit='return confirm({{ t("users.confirm_toggle")|tojson }})'>
+            <button type="submit" class="btn btn-ghost btn-sm">
+              {% if u.is_active %}{{ t('users.deactivate') }}{% else %}{{ t('users.activate') }}{% endif %}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {# Duzenleme satiri UC AYRI form tasir (guncelle / sifre ata / sil).
+         Ic ice <form> HTML'de gecersizdir — tarayici sessizce ictekini atar ve
+         "kaydet" dugmesi hicbir sey yapmaz gorunur. `style="display:none"`
+         Alpine yuklenene kadar satirin bir an acik gorunmesini onler. #}
+      <tr x-show="editing === {{ u.id }}" x-cloak style="display:none">
+        <td colspan="7" class="bg-slate-50/70 p-5">
+          <div class="grid grid-cols-4 gap-3 items-end">
+            <form method="post" action="/auth/users/{{ u.id }}/update"
+                  class="col-span-4 grid grid-cols-4 gap-3 items-end">
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">{{ t('users.col.full_name') }}</label>
+                <input name="full_name" value="{{ u.full_name }}" class="input">
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">{{ t('users.email') }}</label>
+                <input name="email" type="email" value="{{ u.email }}" class="input">
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">{{ t('users.col.role') }}</label>
+                <select name="role" class="input">
+                  {% for r in roles %}
+                  <option value="{{ r }}" {% if r == u.role %}selected{% endif %}>{{ t_or('role.' ~ r, r) }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <button type="submit" class="btn btn-primary">{{ t('users.save') }}</button>
+            </form>
+
+            <form method="post" action="/auth/users/{{ u.id }}/password"
+                  class="col-span-4 grid grid-cols-4 gap-3 items-end border-t border-slate-200 pt-4">
+              <div class="col-span-2">
+                <label class="block text-xs text-slate-500 mb-1">{{ t('users.set_password') }}</label>
+                <input required name="new_password" type="password" minlength="8"
+                       placeholder="{{ t('users.password_ph') }}" class="input" autocomplete="new-password">
+              </div>
+              <button type="submit" class="btn btn-ghost">{{ t('users.set_password') }}</button>
+              <div></div>
+            </form>
+
+            <form method="post" action="/auth/users/{{ u.id }}/delete"
+                  class="col-span-4 border-t border-slate-200 pt-4"
+                  onsubmit='return confirm({{ t("users.confirm_delete")|tojson }})'>
+              <button type="submit" class="btn btn-danger">{{ t('users.delete') }}</button>
+              <span class="text-xs text-slate-400 ml-3">{{ t('users.delete_hint') }}</span>
+            </form>
+          </div>
+          <p class="text-xs text-slate-400 mt-4">{{ t('users.session_note') }}</p>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

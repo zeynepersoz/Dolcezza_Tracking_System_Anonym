@@ -1,0 +1,548 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.dashboard') }}{% endblock %}
+
+{% block content %}
+{#
+  Panel listeleri. Uc kutu da AYNI makrodan cizilir: kullanici sayiyi degil
+  LISTEYI istedi ("takip numarasi, fatura vs. hap gibi"), yani ayni tablo uc
+  kez gerekiyordu. Tek fark baslik ve tarih kolonu.
+  Magaza kodu one alinmis, satis temsilcisi yok — hizli arama tablosuyla ayni
+  gerekce (bkz. `_partials/tracking_rows.html`).
+  Tanim EN USTTE: Jinja makrolari yukari tasinmaz, ilk cagri gövdenin
+  ortasindan (arama kutusunun altindan) geliyor.
+#}
+{% macro parcel_panel(title, note, rows, href, dot, empty_text, date_label, date_field) %}
+<div class="card overflow-hidden">
+  <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+    <div class="min-w-0">
+      <h2 class="card-title flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full shrink-0 bg-{{ dot }}-500 {% if dot == 'rose' %}animate-pulse{% endif %}"></span>
+        {{ title }}
+      </h2>
+      <p class="card-subtitle">{{ note }}</p>
+    </div>
+    <a href="{{ href }}" class="text-sm text-slate-500 hover:text-slate-900 inline-flex items-center gap-1 shrink-0">
+      {{ t('dash.see_all') }}
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+      </svg>
+    </a>
+  </div>
+  {% if rows %}
+  {# Bes kolon: bu kutulardan IKISI yan yana duruyor ve kanal + sezon eklenince
+     yarim genislige sigmiyor, altta yatay kaydirma cubugu cikiyordu. Kanal
+     takip numarasinin onekinden, sezon ise magaza kodundan zaten okunuyor;
+     ikisi de burada degil /tracking'te isini goruyor. #}
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{ t('field.tracking_no') }}</th>
+          <th>{{ t('field.store_code') }}</th>
+          <th>{{ t('field.invoice_number') }}</th>
+          <th>{{ t('field.country') }}</th>
+          <th>{{ date_label }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in rows %}
+        <tr class="cursor-pointer" onclick="window.location='/tracking?search={{ p.tracking_no }}'">
+          <td class="font-mono text-slate-700 text-xs">{{ p.tracking_no }}</td>
+          <td class="font-semibold text-slate-900">{{ p.store_code or p.consignee_name or '—' }}</td>
+          <td class="text-xs text-slate-600">{{ p.invoice_number or '—' }}</td>
+          <td>{{ p.country or '—' }}</td>
+          {# Teslim damgasi tam ISO'dur -> yerel saate cevrilir; sevk tarihi
+             yalnizca gundur, `localtime` onu bilerek oldugu gibi birakir. #}
+          <td class="text-xs text-slate-500">{{ p[date_field]|localtime or p[date_field] or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="px-6 py-16 text-center text-slate-400">
+    <svg class="w-10 h-10 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+    </svg>
+    {{ empty_text }}
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+<div class="max-w-7xl mx-auto space-y-6">
+
+  {#
+    Ust serit: kartlar. Altlarindaki aciklama satirlari KALDIRILDI (kullanici
+    istegi) — kartin neyi saydigi artik BASLIGINDA yaziyor ("Bu Hafta Sevk
+    Edilen", "Bugün Teslim Edilen"), altta yalnizca yuzde kaliyor.
+
+    Statu kartlari `flow`dan uretiliyor (bkz. `_status_flow`): eskiden liste
+    burada ELLE yaziliydi ve `created` aralarinda YOKTU — 986 parcanin 249'u
+    (%25) ekranda hic gorunmuyor, yuzdeler %74.5'te kaliyordu. Artik kaynak
+    `STATUS_CHOICES`/`STATUS_COLOR`, yeni bir statu eklendiginde burasi
+    sessizce eksik kalamaz.
+  #}
+  {# Yuzdelerin paydasi: ERP/MSSQL tarafiyla karsilastirmanin tek sayisi. #}
+  <div class="text-right text-xs text-slate-400">{{ t('dash.total_parcels', count=total) }}</div>
+
+  {# 8 kutu TEK sirada (xl:grid-cols-8) cizilince her biri daralip kanal
+     kirilimi sigmiyordu. Kullanici karari (2026-09-03): "4 ustte 4 altta".
+     Iki sira, her kutu iki kat genis — kirilim tek satirda okunuyor. #}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 !mt-2">
+    {# `kg` satiri kaldirildi: 986 kaydin hicbirinde `weight_kg` yok, kart her
+       zaman "0 kg" yaziyordu (satis temsilcisi ve nakliye tutari ayni gerekce
+       ile daha once kaldirilmisti, bkz. modul aciklamasi). #}
+    <div class="card p-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('dash.week') }}</div>
+          <div class="mt-2 text-3xl font-bold text-slate-900">{{ week.total or 0 }}</div>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center text-gls-yellow">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    {# "Bugun teslim edilen" ikinci sirada: kullanici sabah paneli acar acmaz
+       once ona bakiyor; asagidaki `delivered` karti KUMULATIFTIR. Ikisinin de
+       olcutu basliginda. #}
+    <a href="/tracking?delivered_day={{ today }}"
+       class="card p-5 block hover:border-slate-300 hover:shadow-sm transition">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ t('dash.delivered_today') }}</div>
+          <div class="mt-2 text-3xl font-bold text-slate-900">{{ delivered_today }}</div>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+      </div>
+    </a>
+
+    {% set icons = {
+      'created': 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
+      'in_transit': 'M13 5l7 7-7 7M5 5l7 7-7 7',
+      'out_for_delivery': 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4',
+      'delivered': 'M5 13l4 4L19 7',
+      'exception': 'M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.75-2.98l-7.07-12.02a2 2 0 00-3.5 0L3.18 16.02A2 2 0 004.93 19z',
+      'returned': 'M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4',
+      'cancelled': 'M6 18L18 6M6 6l12 12',
+    } %}
+    {% for f in flow %}
+    <a href="{{ f.href }}" class="card p-5 block hover:border-slate-300 hover:shadow-sm transition">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold">{{ f.label }}</div>
+          <div class="mt-2 text-3xl font-bold text-slate-900">{{ f.count }}</div>
+        </div>
+        <div class="w-9 h-9 rounded-lg bg-{{ f.color }}-50 flex items-center justify-center text-{{ f.color }}-600">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icons[f.code] }}"/>
+          </svg>
+        </div>
+      </div>
+      {# Yuzde Python'da hesaplandi; payda 0 iken bolme sablonda patliyordu. #}
+      <div class="mt-3 text-xs text-slate-400">{{ t('dash.pct_of_total', pct=f.pct) }}</div>
+
+      {# Kanal kirilimi (kullanici istegi 2026-09-03). Sifir olan kanal SOLUK
+         gosterilir ama GIZLENMEZ: kutularin yuksekligi esit kalsin, ayrica
+         "0" bilgi verir ("bu kanalda yok" ile "kanal yok" ayni sey degil). #}
+      <div class="mt-2 pt-2 border-t border-slate-100 flex items-center gap-2 text-[10px]">
+        {% for c in f.channels %}
+        <span class="flex items-center gap-1 {% if c.count %}text-slate-600{% else %}text-slate-300{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full {% if c.code == 'NL' %}bg-blue-400{% elif c.code == 'FEDEX' %}bg-orange-400{% else %}bg-amber-400{% endif %}"></span>
+          <span class="font-medium">{{ c.label }}</span>
+          <span class="tabular-nums">{{ c.count }}</span>
+        </span>
+        {% endfor %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+
+  {#
+    Hizli arama. Avrupa ofisi takip numarasini degil MAGAZA KODUNU biliyor
+    ("AHAAT01") — once /tracking'e gidip sutun suzgeci acmak gereksiz bir adimdi.
+    Satirlar ve detay paneli takip sayfasiyla AYNI sablondan gelir; iki ayri
+    tablo tutulsaydi biri duzeltilip digeri eski kalirdi.
+  #}
+  <div class="card p-5">
+    <div class="flex items-center gap-3">
+      <div class="relative flex-1">
+        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/>
+        </svg>
+        <input type="search" name="search" autocomplete="off"
+               placeholder="{{ t('dash.search_ph') }}"
+               class="input pl-9"
+               hx-get="/tracking/quick"
+               hx-trigger="input changed delay:300ms, search"
+               hx-target="#quick-tbody"
+               hx-include="[name='season']"
+               hx-indicator="#quick-spinner">
+      </div>
+      {# Sezon suzgeci aramanin YANINDA: ayni magaza kodu her sezon tekrar
+         ediyor, sezon secilmeden sonuclar birbirine karisiyordu. Sezonu olan
+         parca yoksa (ERP senkronu daha calismadiysa) kutu hic cizilmez. #}
+      {% if season_options %}
+      {# Genislik `w-*` ile DEGIL `basis-*` ile verilir: `select.input` kurali
+         (base.html) iki secicili oldugu icin `width:100%`i utility'ye yedirmiyor
+         — kutu tum satiri kaplayip arama kutusunu ezmisti. #}
+      <select name="season" class="input basis-40 grow-0 shrink-0"
+              hx-get="/tracking/quick" hx-trigger="change"
+              hx-target="#quick-tbody" hx-include="[name='search']"
+              hx-indicator="#quick-spinner">
+        <option value="">{{ t('tracking.season_any') }}</option>
+        {% for code, label, count, checked in season_options %}
+        <option value="{{ code }}">{{ label }} ({{ count }})</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <svg id="quick-spinner" class="htmx-indicator w-4 h-4 animate-spin text-slate-400"
+           fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+      </svg>
+      <a href="/tracking" class="btn btn-secondary btn-sm shrink-0">{{ t('dash.open_tracking') }}</a>
+    </div>
+
+    <div class="table-scroll mt-4 max-h-[420px]">
+      <table class="data-table">
+        <thead>
+          <tr>
+            {# Bu tabloda takip no POD'un HEMEN YANINDA; satirlari ureten
+               `_partials/tracking_rows.html` bunu `quick` bayragiyla yapar.
+               /tracking sayfasinin sirasi FARKLI — o baslik orada. #}
+            <th>{{ t('field.channel') }}</th>
+            <th>{{ t('field.store_code') }}</th>
+            <th>{{ t('field.invoice_number') }}</th>
+            <th>{{ t('field.consignee') }}</th>
+            <th>{{ t('field.season') }}</th>
+            <th>{{ t('field.status') }}</th>
+            <th>{{ t('field.shipment_date') }}</th>
+            <th>{{ t('field.tracking_no') }}</th>
+            <th class="text-right">POD</th>
+          </tr>
+        </thead>
+        <tbody id="quick-tbody">
+          <tr><td colspan="9" class="!py-12 text-center text-slate-400">
+            {{ t('dash.search_hint') }}
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# Gunluk isin ozeti aramanin HEMEN ALTINDA ve yan yana: kullanici paneli
+     acar acmaz "bugun ne teslim edildi / bugun ne teslim edilecek" ikisini
+     birden gorsun, asagi kaydirmasin. Dar ekranda alt alta duserler. #}
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    {{ parcel_panel(t('dash.delivered_today'), t('dash.delivered_today_note'),
+                    delivered_today_rows, '/tracking?delivered_day=' ~ today,
+                    'emerald', t('dash.no_delivered_today'),
+                    t('field.delivered_date'), 'delivered_date') }}
+
+    {{ parcel_panel(status_label('out_for_delivery'), t('dash.out_note'),
+                    out_for_delivery_rows, '/tracking?status=out_for_delivery',
+                    'amber', t('dash.no_out_for_delivery'),
+                    t('field.shipment_date'), 'shipment_date') }}
+  </div>
+
+  <!-- Elle mudahale gerektirenler -> /problems -->
+  {% if problems.total %}
+  <a href="/problems" class="card p-4 flex items-center justify-between gap-4 hover:border-slate-300 transition">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="text-sm font-semibold text-slate-900">{{ t('dash.problems_waiting', count=problems.total) }}</div>
+        <div class="text-xs text-slate-400 mt-0.5">
+          {{ t('dash.problems_breakdown', exception=problems.exception, stale=problems.stale,
+                pod_missing=problems.pod_missing, returned=problems.returned)|safe }}
+        </div>
+      </div>
+    </div>
+    <span class="btn btn-secondary btn-sm">{{ t('dash.open_list') }}</span>
+  </a>
+  {% endif %}
+
+  <!-- Grafik + Kanal Dagilimi -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 card p-6">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="card-title">{{ t('dash.trend_title') }}</h2>
+          <p class="card-subtitle">{{ t('dash.trend_note')|safe }}</p>
+        </div>
+        <div class="text-xs text-slate-400">
+          {{ t('dash.avg') }}:
+          <span class="font-semibold text-slate-700">
+            {% if weekly %}{{ (weekly | map(attribute='delivered') | sum) // weekly|length }}{% else %}0{% endif %}
+          </span> {{ t('dash.per_week') }}
+        </div>
+      </div>
+      <canvas id="chart-weekly" height="120"></canvas>
+    </div>
+
+    <div class="card p-6">
+      <h2 class="card-title mb-1">{{ t('dash.channels_title') }}</h2>
+      <p class="card-subtitle mb-4">{{ t('dash.channels_note')|safe }}</p>
+
+      {% for channel, breakdown in channel_breakdown.items() %}
+        {% set ch_total = breakdown.values() | sum %}
+        <div class="mb-4">
+          <div class="flex items-center justify-between text-xs mb-1.5">
+            <div class="flex items-center gap-2">
+              <span class="badge {% if channel == 'NL' %}badge-blue{% elif channel == 'FEDEX' %}badge-orange{% else %}badge-amber{% endif %}">{{ channel }}</span>
+              <span class="font-medium text-slate-700">
+                {% if channel == 'NL' %}GLS Netherlands{% elif channel == 'FEDEX' %}FedEx{% else %}GLS Ireland{% endif %}
+              </span>
+            </div>
+            <span class="text-slate-500">{{ ch_total }}</span>
+          </div>
+          <div class="flex h-2 rounded-full overflow-hidden bg-slate-100">
+            {% if ch_total > 0 %}
+              <div class="bg-emerald-500" style="width: {{ (breakdown.delivered / ch_total * 100)|round(0) }}%"></div>
+              <div class="bg-amber-500"   style="width: {{ (breakdown.out_for_delivery / ch_total * 100)|round(0) }}%"></div>
+              <div class="bg-blue-500"    style="width: {{ (breakdown.in_transit / ch_total * 100)|round(0) }}%"></div>
+              <div class="bg-rose-500"    style="width: {{ (breakdown.exception / ch_total * 100)|round(0) }}%"></div>
+              <div class="bg-violet-500"  style="width: {{ (breakdown.returned / ch_total * 100)|round(0) }}%"></div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+
+      <div class="pt-3 border-t border-slate-100 flex items-center gap-3 text-[10px] text-slate-500 flex-wrap">
+        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>{{ t('dash.short.delivered') }}</div>
+        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span>{{ t('dash.short.out_for_delivery') }}</div>
+        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span>{{ t('dash.short.in_transit') }}</div>
+        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-500"></span>{{ t('dash.short.exception') }}</div>
+        <div class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-violet-500"></span>{{ t('dash.short.returned') }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ulkeler -->
+  <div class="grid grid-cols-1 gap-6">
+    <div class="card p-6">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="card-title">{{ t('dash.countries_title') }}</h2>
+          <p class="card-subtitle">{{ t('dash.countries_note')|safe }}</p>
+        </div>
+      </div>
+      <table class="w-full text-sm">
+        <tbody class="divide-y divide-slate-100">
+          {% for c in top_countries %}
+          <tr>
+            <td class="py-2.5 text-slate-700 font-medium">{{ c.country }}</td>
+            <td class="py-2.5">
+              <div class="flex items-center gap-2">
+                <div class="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <div class="bg-gls-yellow h-full" style="width: {{ (c.delivered / c.total * 100)|round(0) if c.total else 0 }}%"></div>
+                </div>
+                <span class="text-xs text-slate-500 w-16 text-right">
+                  {{ c.delivered }}/{{ c.total }}
+                </span>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+          {% if not top_countries %}
+          <tr><td colspan="2" class="py-8 text-center text-slate-400">{{ t('common.no_data') }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Sorunlu kargolar -->
+  {{ parcel_panel(t('dash.attention_title'), t('dash.attention_note'),
+                  exceptions, '/tracking?status=exception',
+                  'rose', t('dash.no_exceptions'),
+                  t('field.shipment_date'), 'shipment_date') }}
+
+  <!-- ParcelShop uyarisi — kullanici istegi (2026-08-31): "dashboarda
+       delivered to parcel shop uyarısı olan ayrı bir kutu ekleyelim". GLS
+       kendi ParcelShop'una biraktigi koliyi "teslim edildi" sayar; musteri
+       almazsa GLS bir sure sonra onu geri döndürür. Detay `/reports/parcel-shop`de
+       (bkz. tracking/delivery_report.py). #}
+  {{ parcel_panel(t('dash.parcel_shop_title'), t('dash.parcel_shop_note'),
+                  parcel_shop_at_risk, '/reports/parcel-shop',
+                  'amber', t('dash.parcel_shop_empty'),
+                  t('reports.parcel_shop.col.first_at'), 'first_at') }}
+
+  <!-- Teslimat sureleri (raporlarla ayni veri, kullanici istegi 2026-08-31) -->
+  {% if delivery_chart.has_data %}
+  <div class="card p-6">
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <div>
+        <h2 class="card-title">{{ t('dash.delivery_chart_title') }}</h2>
+        <p class="card-subtitle">{{ t('dash.delivery_chart_note')|safe }}</p>
+      </div>
+      <a href="/reports" class="btn btn-secondary btn-sm">{{ t('dash.delivery_chart_open') }}</a>
+    </div>
+    <canvas id="chart-delivery" height="90"></canvas>
+  </div>
+  {% endif %}
+
+  <!-- Scheduler durumu (kompakt) -->
+  <div class="card p-5 flex items-center justify-between text-sm">
+    <div class="flex items-center gap-4">
+      <div class="w-10 h-10 rounded-lg bg-gls-yellow/20 flex items-center justify-center text-gls-dark">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="font-semibold text-slate-800">{{ t('dash.tracker_title') }}</div>
+        <div class="text-xs text-slate-500">{{ t('dash.tracker_note', minutes=tracker_info.interval) }}</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-6 text-xs">
+      <div>
+        <div class="text-slate-400 uppercase tracking-wider">{{ t('dash.last_run') }}</div>
+        <div class="text-slate-700 font-medium mt-0.5">{{ tracker_info.last_run_at|localtime or t('dash.never_run') }}</div>
+      </div>
+      <div>
+        <div class="text-slate-400 uppercase tracking-wider">{{ t('field.status') }}</div>
+        {# Olcut `tracker_alarm` (bkz. web/deps.py) — `/health` ve uyari mailiyle
+           AYNI esik. Once "last_error dolu mu" diye bakiliyordu: `record_tick()`
+           o alani her turda yaziyor ve kalici bozuk birkac parca yuzunden asla
+           bosalmiyordu, dolayisiyla kart sistem saglikliyken bile HEP "Hata"
+           diyordu. Hata metni ipucunda duruyor. #}
+        <div class="mt-0.5" {% if tracker_info.last_error %}title="{{ tracker_info.last_error }}"{% endif %}>
+          {% if tracker_alarm %}
+            <span class="text-rose-600 font-medium">{{ t('dash.health_error') }}</span>
+          {% else %}
+            <span class="text-emerald-600 font-medium inline-flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> {{ t('dash.health_ok') }}
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Detay yan paneli (takip sayfasiyla ortak) -->
+{% include "_partials/detail_drawer.html" %}
+
+<!-- Chart.js (yerel kopya — bkz. base.html: dis CDN'ler ic agda erisilemiyordu) -->
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script>
+(function() {
+  // Grafik metinleri de sozlukten — `tojson` tirnak/kacis isini ustleniyor.
+  const T = {
+    prefix:    {{ t('dash.week_prefix')|tojson }},
+    delivered: {{ t('dash.short.delivered')|tojson }},
+  };
+  const weekly = {{ weekly | tojson }};
+  const labels = weekly.map(w => T.prefix + (w.week || '').split('-')[1]);
+  const data   = weekly.map(w => w.delivered);
+  const ctx = document.getElementById('chart-weekly');
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels.length ? labels : ['—'],
+      datasets: [{
+        label: T.delivered,
+        data: data.length ? data : [0],
+        backgroundColor: '#FFCC00',
+        borderRadius: 6,
+        maxBarThickness: 44,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0A1A2A',
+          padding: 10,
+          cornerRadius: 6,
+          callbacks: {
+            label: (item) => item.parsed.y + ' ' + T.delivered
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#64748b', font: {size: 11} } },
+        y: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8', font: {size: 11}, precision: 0 }, beginAtZero: true }
+      }
+    }
+  });
+
+  // Teslimat sureleri (ulkeye gore) — /reports ile ayni veri kaynagi
+  // (tracking/delivery_report.py), yalnizca urun-adedi sorgusu olmadan.
+  const DT = {
+    emcGls:   {{ t('reports.col.emc_gls')|tojson }},
+    glsStore: {{ t('reports.col.gls_store')|tojson }},
+    unit:     {{ t('dash.delivery_chart_unit')|tojson }},
+  };
+  const deliveryChart = {{ delivery_chart | tojson }};
+  const dcCtx = document.getElementById('chart-delivery');
+  if (dcCtx && deliveryChart.by_country && deliveryChart.by_country.length) {
+    const dcCountries = deliveryChart.by_country;
+    new Chart(dcCtx, {
+      type: 'bar',
+      data: {
+        labels: dcCountries.map(c => c.name),
+        datasets: [
+          {
+            label: DT.emcGls,
+            data: dcCountries.map(c => c.emc_to_gls),
+            backgroundColor: '#0A1A2A',
+            borderRadius: 4,
+            maxBarThickness: 40,
+            stack: 'leg',
+          },
+          {
+            label: DT.glsStore,
+            data: dcCountries.map(c => c.gls_to_store),
+            backgroundColor: '#FFCC00',
+            borderRadius: 4,
+            maxBarThickness: 40,
+            stack: 'leg',
+          },
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: {size: 11}, color: '#64748b' } },
+          tooltip: {
+            backgroundColor: '#0A1A2A',
+            padding: 10,
+            cornerRadius: 6,
+            callbacks: {
+              label: (item) => item.dataset.label + ': ' + item.parsed.y + ' ' + DT.unit
+            }
+          }
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { color: '#64748b', font: {size: 11} } },
+          y: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8', font: {size: 11} }, beginAtZero: true }
+        }
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

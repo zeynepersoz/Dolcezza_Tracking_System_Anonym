@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}{{ t('problems.title') }}{% endblock %}
+
+{% block content %}
+{% set kind_colors = {
+  'total': 'slate',
+  'exception': 'rose',
+  'damaged': 'orange',
+  'partial': 'amber',
+  'pod_missing': 'blue',
+  'stale': 'amber',
+  'not_handed_over': 'slate',
+  'returned': 'violet'
+} %}
+
+{% set kind_icons = {
+  'total': 'M4 6h16M4 10h16M4 14h16M4 18h16',
+  'exception': 'M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.75-2.98l-7.07-12.02a2 2 0 00-3.5 0L3.18 16.02A2 2 0 004.93 19z',
+  'damaged': 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
+  'partial': 'M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z',
+  'pod_missing': 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+  'stale': 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+  'not_handed_over': 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
+  'returned': 'M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4'
+} %}
+
+<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  {% for key in ['total'] + kinds|list %}
+  {% set is_active = (filter_kind == key) or (key == 'total' and not filter_kind) %}
+  {% set color = kind_colors.get(key, 'slate') %}
+  <a href="/problems?stale_days={{ stale_days }}{% if key != 'total' %}&kind={{ key }}{% endif %}"
+     class="card p-5 block hover:border-slate-300 hover:shadow-sm transition {% if is_active %}ring-2 ring-gls-yellow shadow-sm border-transparent{% endif %}">
+    <div class="flex items-start justify-between">
+      <div class="min-w-0">
+        <div class="text-xs text-slate-400 uppercase tracking-wide font-semibold truncate">
+          {{ t('common.total') if key == 'total' else t('problems.kind.' + key) }}
+        </div>
+        <div class="mt-2 text-3xl font-bold text-slate-900">{{ counts[key] }}</div>
+      </div>
+      <div class="w-9 h-9 rounded-lg bg-{{ color }}-50 flex items-center justify-center text-{{ color }}-600 shrink-0">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ kind_icons.get(key, 'M13 10V3L4 14h7v7l9-11h-7z') }}"/>
+        </svg>
+      </div>
+    </div>
+    <div class="mt-3 text-xs text-slate-400 truncate">
+      {% if key == 'total' %}
+        {{ t('problems.subtitle') }}
+      {% else %}
+        {{ t('problems.hint.' + key, days=stale_days) }}
+      {% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <div class="card-header flex items-center justify-between gap-4 flex-wrap">
+    <div>
+      <div class="card-title">{{ t('problems.title') }}</div>
+      <div class="card-subtitle">
+        {{ t('problems.subtitle') }} {{ t('problems.showing', count=parcels|length) }}
+      </div>
+    </div>
+    <form method="get" action="/problems" class="flex items-end gap-2">
+      <input type="hidden" name="kind" value="{{ filter_kind }}">
+      <div>
+        <label class="field-label" for="stale_days">{{ t('problems.stale_threshold') }}</label>
+        <input class="input w-40" type="number" id="stale_days" name="stale_days"
+               min="1" max="365" value="{{ stale_days }}">
+      </div>
+      <button class="btn btn-secondary" type="submit">{{ t('common.apply') }}</button>
+      {% if filter_kind %}
+      <a class="btn btn-ghost" href="/problems?stale_days={{ stale_days }}">{{ t('problems.clear_filter') }}</a>
+      {% endif %}
+      {% if counts['pod_missing'] %}
+      <a class="btn btn-secondary" href="/problems/gls-inquiry?stale_days={{ stale_days }}">
+        {{ t('inquiry.open') }}
+      </a>
+      {% endif %}
+    </form>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>{{ t('problems.kind') }}</th>
+          <th>{{ t('field.channel') }}</th>
+          <th>{{ t('field.tracking_no') }}</th>
+          <th>{{ t('field.consignee') }}</th>
+          <th>{{ t('field.status') }}</th>
+          <th>{{ t('problems.reason_col') }}</th>
+          <th class="text-right">{{ t('common.action') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in parcels %}
+        <tr>
+          <td>
+            <span class="badge badge-{{ kind_colors.get(p.problem_kind, 'slate') }}">
+              <span class="badge-dot"></span>{{ t('problems.kind.' + p.problem_kind) }}
+            </span>
+          </td>
+          <td><span class="badge {% if p.channel == 'NL' %}badge-blue{% else %}badge-amber{% endif %}">{{ p.channel }}</span></td>
+          <td class="font-mono text-xs text-slate-700">
+            {{ p.tracking_no }}
+            {% if p.invoice_number %}<div class="text-[11px] text-slate-400">{{ p.store_code }}-{{ p.invoice_number }}</div>{% endif %}
+          </td>
+          <td>
+            {{ p.consignee_name or '—' }}
+            {% if p.country %}<div class="text-xs text-slate-400">{{ p.country }}{% if p.zip_code %} · {{ p.zip_code }}{% endif %}</div>{% endif %}
+          </td>
+          <td>
+            <span class="badge badge-{{ status_color(p.status) }}">
+              <span class="badge-dot"></span>{{ status_label(p.status) }}
+            </span>
+          </td>
+          <td class="text-xs text-slate-600 max-w-xs">
+            {# `explain_text`: teslim notu TR saklanir EN panelde cevrilir, sona
+               son islem tarihi eklenir — ERP'ye ve Excel'e giden metnin aynisi. #}
+            {{ explain_text(p.issue_text or p.problem_reason or p.explain or p.last_event_text or '—',
+                            p.last_event_at or p.updated_at) }}
+            {% if p.source_sheet %}<div class="text-[11px] text-slate-400">{{ p.source_sheet }}</div>{% endif %}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <a href="/tracking?f_tracking_no={{ p.tracking_no }}" class="btn btn-ghost btn-sm">{{ t('common.detail') }}</a>
+            {% if p.problem_kind == 'pod_missing' %}
+            <a href="/pod/download/{{ p.tracking_no }}" class="btn btn-secondary btn-sm">{{ t('problems.try_pod') }}</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% if not parcels %}
+        <tr><td colspan="7" class="!py-12 text-center text-slate-400">{{ t('problems.empty') }}</td></tr>
+        {% endif %}
+        {% if truncated %}
+        <tr><td colspan="8" class="!py-2 text-center text-xs text-amber-600 bg-amber-50">
+          {{ t('common.truncated', count=parcels|length) }}
+        </td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

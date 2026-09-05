@@ -1,0 +1,45 @@
+{% extends "settings_base.html" %}
+
+{% block section %}
+<div class="card overflow-hidden" x-data="{ dirty: false }">
+  <div class="card-header">
+    <h2 class="card-title">{{ title }}</h2>
+    <p class="card-subtitle">{{ note }}</p>
+  </div>
+
+  {% if not mail_ready %}
+  <div class="mx-6 mt-6 text-amber-800 text-sm p-3 bg-amber-50 border border-amber-200 rounded-lg">
+    {{ t('settings.mail_missing')|safe }}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/settings/notify" class="p-6 space-y-4" @input="dirty = true">
+    {% for f in fields %}
+      {% include "_partials/settings_field.html" %}
+    {% endfor %}
+
+    <div class="flex items-center justify-between pt-2">
+      <button type="button" class="btn btn-ghost"
+              :disabled="dirty" :class="dirty && 'opacity-40 cursor-not-allowed'"
+              hx-post="/settings/notify/test" hx-target="#test-result" hx-swap="innerHTML">
+        {{ t('settings.notify_send_now') }}
+      </button>
+      <button type="submit" class="btn btn-primary">{{ t('common.save') }}</button>
+    </div>
+    <p class="text-xs text-slate-400" x-show="dirty">{{ t('settings.notify_dirty') }}</p>
+  </form>
+
+  {% if digest and digest.last_run_at %}
+  <div class="px-6 pb-4 text-xs text-slate-500">
+    {{ t('settings.notify_last_run') }}: {{ digest.last_run_at|localtime }}
+    {% if digest.last_error %}
+      &middot; <span class="text-rose-600">{{ digest.last_error }}</span>
+    {% elif digest.last_detail %}
+      &middot; {{ digest.last_detail }}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div id="test-result" class="px-6 pb-6 empty:hidden"></div>
+</div>
+{% endblock %}

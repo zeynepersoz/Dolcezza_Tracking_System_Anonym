@@ -1,0 +1,35 @@
+{% extends "auth_base.html" %}
+
+{% block title %}{{ t('auth.login_title') }}{% endblock %}
+
+{% block card %}
+<form method="post" action="/auth/login" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-4">
+  {# Oturum zaman asimina ugradiginda kullanici bulundugu sayfaya geri doner;
+     eskiden `next` adrese yaziliyordu ama hic okunmuyordu, herkes panoya
+     atiliyordu. Deger sunucuda dogrulanir (bkz. auth.py:_safe_next). #}
+  <input type="hidden" name="next" value="{{ next_url }}">
+  {% if error %}
+  <div class="text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-sm">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <div>
+    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{{ t('auth.username') }}</label>
+    <input required autofocus name="username" type="text" autocomplete="username" class="input">
+  </div>
+  <div>
+    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{{ t('auth.password') }}</label>
+    <input required name="password" type="password" autocomplete="current-password" class="input">
+  </div>
+  <button type="submit"
+          class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold text-sm transition">
+    {{ t('auth.submit') }}
+  </button>
+  <div class="text-center pt-1">
+    <a href="/auth/forgot" class="text-xs text-slate-500 hover:text-slate-900 hover:underline">
+      {{ t('auth.forgot_link') }}
+    </a>
+  </div>
+</form>
+{% endblock %}

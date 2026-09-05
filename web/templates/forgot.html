@@ -1,0 +1,31 @@
+{% extends "auth_base.html" %}
+
+{% block title %}{{ t('auth.forgot_title') }}{% endblock %}
+
+{% block card %}
+<form method="post" action="/auth/forgot" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-4">
+  {% if error %}
+  <div class="text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-sm">{{ error }}</div>
+  {% endif %}
+  {% if ok %}
+  <div class="text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-sm">{{ ok }}</div>
+  {% endif %}
+
+  <div>
+    <label class="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+      {{ t('auth.forgot_field') }}
+    </label>
+    <input required autofocus name="identifier" type="text" autocomplete="username" class="input">
+    <p class="text-xs text-slate-400 mt-2">{{ t('auth.forgot_hint') }}</p>
+  </div>
+  <button type="submit"
+          class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold text-sm transition">
+    {{ t('auth.forgot_submit') }}
+  </button>
+  <div class="text-center pt-1">
+    <a href="/auth/login" class="text-xs text-slate-500 hover:text-slate-900 hover:underline">
+      {{ t('auth.back_to_login') }}
+    </a>
+  </div>
+</form>
+{% endblock %}

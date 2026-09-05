@@ -1,0 +1,28 @@
+{% extends "settings_base.html" %}
+
+{% block section %}
+<div class="card overflow-hidden" x-data="{ dirty: false }">
+  <div class="card-header">
+    <h2 class="card-title">{{ title }}</h2>
+    <p class="card-subtitle">{{ note }}</p>
+  </div>
+
+  <form method="post" action="/settings/mail" class="p-6 space-y-4" @input="dirty = true">
+    {% for f in fields %}
+      {% include "_partials/settings_field.html" %}
+    {% endfor %}
+
+    <div class="flex items-center justify-between pt-2">
+      <button type="button" class="btn btn-ghost"
+              :disabled="dirty" :class="dirty && 'opacity-40 cursor-not-allowed'"
+              hx-post="/settings/mail/test" hx-target="#test-result" hx-swap="innerHTML">
+        {{ t('settings.mail_verify') }}
+      </button>
+      <button type="submit" class="btn btn-primary">{{ t('common.save') }}</button>
+    </div>
+    <p class="text-xs text-slate-400">{{ t('settings.mail_verify_note')|safe }}</p>
+  </form>
+
+  <div id="test-result" class="px-6 pb-6 empty:hidden"></div>
+</div>
+{% endblock %}
