@@ -1,6 +1,6 @@
 # Dolcezza Gönderi Takip Sistemi
 
-Dolcezza Netherlands BV'nin Avrupa mağaza sevkiyatlarını uçtan uca yöneten iç panel:
+Dolcezza nın Avrupa mağaza sevkiyatlarını uçtan uca yöneten iç panel:
 **etiket üretimi**, **canlı takip**, **teslimat kanıtı (POD) arşivi**, **sorunlu kargo
 takibi** ve **WhatsApp / e-posta bildirimleri**. Kargolar üç taşıma firması üzerinden
 gider ve sistem her birini kendi resmî API'siyle izler.
